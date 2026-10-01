@@ -1,5 +1,9 @@
 // Zeichnet Karte und Querschnitt. Kennt keine Spiellogik, liest nur Zustand.
 import { SLICE } from '../sim/slice.js';
+import { Chain, drawChain } from './chain.js';
+
+const chain = new Chain();
+let lastT = 0;
 
 export const CELL = 20; // Karte: Pixel pro Zelle
 export const U = 48; // Querschnitt: Pixel pro Einheit
@@ -140,21 +144,25 @@ export function drawSlice(ctx, lake, sim) {
     ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
     ctx.beginPath(); ctx.moveTo(2, bottom); ctx.lineTo(W - 2, bottom); ctx.stroke(); ctx.setLineDash([]);
   }
-  // Laufkatze auf dem Ponton, Kette zur Pumpe, Schlauch zum Ponton
-  ctx.fillStyle = '#556'; ctx.fillRect(pump.x - 14, 54, 28, 10);
-  ctx.strokeStyle = '#b9c0c6'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
-  ctx.beginPath(); ctx.moveTo(pump.x, 64); ctx.lineTo(pump.x, pump.y - 30); ctx.stroke(); ctx.setLineDash([]);
+  // Laufkatze auf dem Ponton; die Kette hängt frei und schwingt nach, wenn die Pumpe fährt oder gezogen wird
+  const bodyTop = pump.y - 42, now = performance.now(), dtc = Math.min(0.05, Math.max(0.001, (now - lastT) / 1000));
+  lastT = now;
+  if (chain.owner !== sl) { chain.reset(); chain.owner = sl; }
+  ctx.fillStyle = '#556'; ctx.fillRect(pump.x - 16, 54, 32, 10);
+  chain.update(dtc, pump.x, 64, pump.x, bodyTop);
+  drawChain(ctx, chain);
   ctx.strokeStyle = '#111'; ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.moveTo(W / 2, 52); ctx.quadraticCurveTo(W / 2, pump.y - 50, pump.x + 8, pump.y - 26); ctx.stroke();
-  // Pumpe (kippt nach rechts, wenn sie zu tief gräbt); Einsaugstelle unten rechts
+  ctx.beginPath(); ctx.moveTo(W / 2, 52); ctx.quadraticCurveTo(W / 2, pump.y - 60, pump.x + 14, pump.y - 36); ctx.stroke();
+  // Pumpe: ein einziges Teil an der Kette, Einsaugöffnung unten rechts am Körper.
+  // Sie pendelt mit der Kette und kippt nach rechts, wenn sie zu tief gräbt.
   ctx.save();
-  ctx.translate(pump.x, pump.y); ctx.rotate(sl.tilt * 0.55 + (sl.tipped > 0 ? 0.6 : 0));
-  ctx.fillStyle = '#2b2f33'; ctx.fillRect(-14, -28, 28, 28);
-  ctx.fillStyle = '#7a828a'; ctx.fillRect(-14, -4, 28, 4); ctx.fillRect(-4, -34, 8, 8);
+  ctx.translate(pump.x, pump.y);
+  ctx.rotate(-chain.endAngle() * 0.6 + sl.tilt * 0.55 + (sl.tipped > 0 ? 0.6 : 0));
+  ctx.fillStyle = '#2b2f33'; ctx.fillRect(-22, -36, 44, 36); // Körper
+  ctx.fillStyle = '#3a4147'; ctx.fillRect(10, -4, 28, 22); // Ansaugstutzen unten rechts
+  ctx.fillStyle = '#0d0f11'; ctx.fillRect(14, 14, 24, 4); // Öffnung
+  ctx.fillStyle = '#7a828a'; ctx.fillRect(-22, -10, 32, 4); ctx.fillRect(-6, -48, 12, 8); // Band, Ösen
   ctx.restore();
-  ctx.strokeStyle = '#555c63'; ctx.lineWidth = 10; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(pump.x + 10, pump.y - 8); ctx.lineTo(mouth.x - 6, mouth.y - 2); ctx.stroke(); ctx.lineCap = 'butt';
-  ctx.fillStyle = '#2b2f33'; ctx.fillRect(mouth.x - 14, mouth.y - 4, 28, 8);
   // Saugradius und Sog an der Einsaugstelle
   ctx.strokeStyle = sl.suctioning ? '#7fe3ff' : '#ffffff44'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
   ctx.beginPath(); ctx.arc(mouth.x, mouth.y, sim.stats.radius * U, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);

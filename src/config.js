@@ -42,8 +42,8 @@ export const CONFIG = {
   },
   // Pumpe an der Kette: Einsaugbereich liegt unten rechts. Wer zu tief abträgt, bringt sie zum Kippen.
   pump: {
-    offsetX: 1.0, // Einsaugbereich rechts der Pumpe (Zellen)
-    offsetY: 0.6, // und unterhalb (Einheiten)
+    offsetX: 0.5, // Einsaugöffnung rechts der Pumpenmitte (Zellen): unten rechts am Pumpenkörper
+    offsetY: 0.3, // und unterhalb des Pumpenbodens (Einheiten)
     tiltRate: 0.6, // Schieflage pro Sekunde und Einheit Abtragtiefe (m³ pro gefahrene Zelle) über der Standfestigkeit
     tiltRecover: 0.4, // Erholung pro Sekunde
     tipSeconds: 6, // Zeit, bis die Pumpe wieder aufgerichtet ist

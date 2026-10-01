@@ -6,6 +6,7 @@ import { Game } from '../src/sim/game.js';
 import { DredgeSim } from '../src/sim/dredge.js';
 import { CONFIG } from '../src/config.js';
 import { computeStats } from '../src/sim/stats.js';
+import { Chain } from '../src/ui/chain.js';
 import { DroneSim } from '../src/sim/drone.js';
 import { classProbabilities, runPlantDay } from '../src/sim/plant.js';
 
@@ -265,7 +266,7 @@ test('Einsaugstelle liegt unten rechts der Pumpe; links der Pumpe wird nichts ge
   for (let c = 0; c < 8; c++) put(c, 5); // ... nur links der Pumpe
   sim.update(0.2, { dx: 1, dy: 0, suction: true });
   assert.equal(sim.removed, 0);
-  put(12, 5); // rechts der Pumpe
+  put(11, 5); // rechts der Pumpe
   sl.h = 5;
   sim.update(0.2, { dx: 1, dy: 0, suction: true });
   assert.ok(sim.removed > 0);
@@ -367,4 +368,23 @@ test('Saubere Zellen ausserhalb der bestellten Fläche werden nicht angesaugt, k
     for (let t = 0; t < 6; t += 0.05) sim.update(0.05, { dx: 1, dy: 0, suction: true });
     assert.equal(sim.overdug, 0, `seed ${seed}`);
   }
+});
+
+test('Kette: Enden fest, Glieder nicht gedehnt, pendelt beim Fahren nach und kommt zur Ruhe', () => {
+  const c = new Chain(14);
+  for (let i = 0; i < 120; i++) c.update(1 / 60, 300, 64, 300, 260);
+  const mid = () => c.p[7].x;
+  assert.ok(Math.abs(c.p[0].x - 300) < 1e-9 && Math.abs(c.p[13].y - 260) < 1e-9);
+  const stretch = (ch) => Math.max(...ch.p.slice(1).map((b, i) => Math.hypot(b.x - ch.p[i].x, b.y - ch.p[i].y))) / ch.seg;
+  assert.ok(stretch(c) < 1.1);
+  // Ketten-Enden fahren 100 px nach rechts: die Mitte hinkt hinterher
+  let lag = 0;
+  for (let i = 0; i < 18; i++) { c.update(1 / 60, 300 + (i + 1) * 100 / 18, 64, 300 + (i + 1) * 100 / 18, 260); lag = Math.max(lag, (300 + (i + 1) * 100 / 18) - mid()); }
+  assert.ok(lag > 3, `lag ${lag}`);
+  for (let i = 0; i < 400; i++) c.update(1 / 60, 400, 64, 400, 260);
+  assert.ok(Math.abs(mid() - 400) < 40);
+  assert.ok(stretch(c) < 1.1);
+  // Pumpe wird hochgezogen: Kette bleibt endlich und gültig
+  for (let i = 0; i < 60; i++) c.update(1 / 60, 400, 64, 400, 260 - i * 2);
+  assert.ok(c.p.every((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y)));
 });
