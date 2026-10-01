@@ -195,7 +195,7 @@ function frame(now) {
 renderPanel();
 showOverlay(`<h2>Seesanierung Uetikon</h2>
   <p>Fahre auf der <b>Karte</b> mit dem Ponton (WASD / Pfeile, Maus gedrückt) an eine Stelle und wirf den Anker (<b>E</b> / Leertaste).
-  Im <b>Querschnitt</b> hängt die Pumpe an einer Kette am Ponton: A/D fährt sie seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse). Der Einsaugbereich liegt unten rechts von der Pumpe, deshalb saugt sie mit gehaltener <b>Leertaste</b> / Mausklick nur nach rechts. Gräbst du zu tief, kippt sie um: bei Schieflage die Kette hochziehen.
+  Im <b>Querschnitt</b> hängt die Pumpe an einer Kette am Ponton: A/D fährt sie seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse). Ohne Eingabe schwebt sie, wo du sie gelassen hast. Der Einsaugbereich liegt unten rechts von der Pumpe, deshalb saugt sie mit gehaltener <b>Leertaste</b> / Mausklick nur nach rechts. Gräbst du zu tief, kippt sie um: bei Schieflage die Kette hochziehen.
   Der Rückweg saugt nicht, ist dafür schneller. <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Automatik-Reset.</p>
   <p>Schraffierte Zellen sind hart: dort brauchst du mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben und drüber fahren hilft).
   Rot = Altlasten. Die belastete Schicht ist überall genau 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, trägt sauberen Untergrund ab und zahlt dafür (orange auf der Karte). Zu viel Trübung gibt Bussen. Alle ${CONFIG.trancheEveryDays} Tage kommt eine Tranche.

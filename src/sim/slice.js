@@ -4,7 +4,7 @@ import { CONFIG, DEBRIS } from '../config.js';
 // Spaltenhöhe = Schlammmenge der Zelle (gleiche Einheit), so bleibt Karte und Querschnitt konsistent.
 // work = Arbeitsrichtung: nur in diese Richtung (rechts bzw. nach unten) wird gesaugt.
 // Rückwärts wird nicht gesaugt; der Kopf muss zum Anfang zurückgezogen werden (schneller).
-export const SLICE = { cols: 16, viewH: 8, sinkSpeed: 4, work: { x: 1, y: 1 }, returnBoost: 1.6 };
+export const SLICE = { cols: 16, viewH: 8, work: { x: 1, y: 1 }, returnBoost: 1.6 };
 
 const ZERO = { removed: 0, toxicRemoved: 0, overdug: 0 };
 
@@ -22,7 +22,7 @@ export class SliceSim {
     this.row = row;
     this.x0 = clamp(Math.round(mapX) - SLICE.cols / 2, 0, lake.cols - SLICE.cols); // linke Zelle des Fensters
     this.x = this.x0 + 0.01; // Saugkopf startet links, absolute Zellenkoordinate
-    this.h = SLICE.viewH * 0.6; // Saugkopf-Höhe über Grund
+    this.h = Math.min(SLICE.viewH, this.surfaceAt(this.x) + 1.5); // Pumpenhöhe über Grund: schwebt, bis man sie verstellt
     this.suctioning = false;
     this.moving = false;
     this.blocked = false; // z. B. Puffer voll: kein Saugen
@@ -120,7 +120,11 @@ export class SliceSim {
 
     const oldX = this.x;
     this.x = clamp(this.x + dx * speed * dt, this.x0, this.x0 + SLICE.cols - P.offsetX - 1e-6);
-    this.h -= dy ? dy * speed * dt : SLICE.sinkSpeed * dt; // ohne vertikale Eingabe sinkt der Kopf
+    this.h -= dy * speed * dt; // die Pumpe schwebt: nur die Kette (W/S) ändert die Höhe
+    if (a.on && !a.error && this.tilt <= 0.5) { // Automatik regelt die Höhe selbst; Stufe 1 schwebt etwas zu hoch
+      const v = s.speed * 1.2 * af * 0.8, target = this.surfaceAt(this.x) + (lvl === 1 ? 0.4 : 0);
+      this.h += clamp(target - this.h, -v * dt, v * dt);
+    }
     this.h = Math.max(this.surfaceAt(this.x), Math.min(this.h, SLICE.viewH)); // nicht in den Grund
 
     // Am Anschlag gibt es keine Fahrt, also auch kein Saugen (horizontal)

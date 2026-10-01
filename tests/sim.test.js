@@ -157,7 +157,7 @@ test('Querschnitt: Saugen nur in Arbeitsrichtung, nur eine Achse, Rückweg ist s
   // Diagonale Eingabe: nur die stärkere Achse zählt
   sl.h = 8; const hs = sl.h;
   sl.update(0.1, { dx: 1, dy: 0.2, suction: false });
-  assert.ok(sl.h <= hs && Math.abs(sl.h - (hs - 4 * 0.1)) < 1e-6); // nur Gravität, keine vertikale Eingabe
+  assert.equal(sl.h, hs); // schwebt: ohne Eingabe auf der Höhenachse bleibt die Pumpe, wo sie ist
 });
 
 const flat = (g, m = 5) => g.lake.setFlat(m); // ebener See, belastete Schicht m dick, Sollsohle bei 0
@@ -387,4 +387,25 @@ test('Kette: Enden fest, Glieder nicht gedehnt, pendelt beim Fahren nach und kom
   // Pumpe wird hochgezogen: Kette bleibt endlich und gültig
   for (let i = 0; i < 60; i++) c.update(1 / 60, 400, 64, 400, 260 - i * 2);
   assert.ok(c.p.every((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y)));
+});
+
+test('Pumpe schwebt: Höhe ändert sich nur durch die Kette, nie in den Grund', () => {
+  const g = new Game(20); flat(g, 3);
+  const sim = g.startShift(); sim.anchor(); const sl = sim.slice;
+  assert.ok(sl.h > 3); // startet über dem Grund
+  const h0 = sl.h;
+  for (let i = 0; i < 60; i++) sim.update(0.1, { dx: i % 20 < 10 ? 1 : -1, dy: 0, suction: false });
+  assert.equal(sl.h, h0);
+  sim.update(0.1, { dx: 0, dy: -1, suction: false });
+  assert.ok(sl.h > h0); // hochziehen
+  for (let i = 0; i < 100; i++) sim.update(0.1, { dx: 0, dy: 1, suction: false });
+  assert.equal(sl.h, 3); // runterlassen bis auf den Grund, nicht tiefer
+});
+
+test('Automatik hält die Pumpe selbst an der Oberfläche', () => {
+  const g = new Game(21); flat(g, 3); g.levels.auto = 2;
+  const sim = g.startShift(); sim.anchor(); sim.toggleAuto();
+  for (let i = 0; i < 30; i++) sim.update(0.1, {});
+  assert.ok(sim.slice.h - 3 < 0.2);
+  assert.ok(sim.removed > 0);
 });
