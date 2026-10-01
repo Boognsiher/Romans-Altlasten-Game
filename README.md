@@ -27,6 +27,7 @@ Spielregeln (Stand):
 - Die belastete Schicht ist überall genau 1 m dick und folgt dem unebenen Seegrund (Sollsohle = gelb gestrichelt). Darunter liegt fester Untergrund: wer dort weitersaugt, trägt zu viel ab (Übertiefung, kostet extra, orange auf der Karte).
 - Harte Schichten (schraffiert) brauchen mehrere Überfahrten; Fremdstoffe verstopfen die Pumpe (Kopf anheben hilft).
 - Anlage an Land: Puffer, Durchsatz, Übertakten; jede Charge wird nach VVEA als Typ B/E/C eingestuft.
+- Echolot (Upgrade): lotet das Fenster vor dem Abtrag aus; die Automatik fährt die eingestellte Abtragsdicke an (Regler oder F/G), saugt nur, wo die Zielhöhe noch nicht erreicht ist, und stoppt von selbst. Stufe 1 misst mit Rauschen.
 - Automatik in drei Stufen (1 = experimentell, macht Fehler, Reset mit R), Trübungsschutz-Kasten ausbaubar.
 - Gewonnen ist der See, wenn die Schicht abgetragen UND von der Drohne abgenommen ist.
 

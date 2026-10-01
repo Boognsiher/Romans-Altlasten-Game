@@ -12,6 +12,7 @@ export class DredgeSim {
     this.rng = rng;
     this.notes = []; // Meldungen aus dem Querschnitt (Verstopfung, Automatik ...)
     this.clogs = 0;
+    this.cutDepth = CONFIG.echolot.defaultCut; // gewünschte Abtragsdicke der Automatik (m)
     this.tips = 0; // wie oft die Pumpe umgekippt ist
     this.repairs = 0; // CHF dafür
     this.bufferRoom = bufferRoom; // so viel m³ passen noch in den Puffer vor der Anlage
@@ -35,9 +36,14 @@ export class DredgeSim {
   // Anker werfen: Querschnitt an der aktuellen Position öffnen
   anchor() {
     if (this.over || this.mode !== 'map') return false;
-    this.slice = new SliceSim(this.lake, this.stats, this.x, this.row, this.rng);
+    this.slice = new SliceSim(this.lake, this.stats, this.x, this.row, this.rng, this.cutDepth);
     this.mode = 'slice';
     return true;
+  }
+
+  setCutDepth(v) {
+    this.cutDepth = Math.min(CONFIG.echolot.maxCut, Math.max(CONFIG.echolot.minCut, v));
+    if (this.slice) this.slice.cutDepth = this.cutDepth;
   }
 
   toggleAuto() { return this.mode === 'slice' && this.slice.toggleAuto(); }

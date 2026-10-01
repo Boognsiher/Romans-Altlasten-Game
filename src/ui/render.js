@@ -106,6 +106,17 @@ export function drawSlice(ctx, lake, sim) {
   for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(G(c)));
   ctx.lineTo(W, yOf(G(SLICE.cols - 1)));
   ctx.strokeStyle = '#ffd24dcc'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.stroke(); ctx.setLineDash([]);
+  // Echolot: gemessenes Profil (punktiert) und Zielhöhe für die gewünschte Abtragsdicke (gestrichelt)
+  if (sl.sounding) {
+    ctx.beginPath();
+    for (let c = 0; c < SLICE.cols; c++) (c ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c), yOf(sl.sounding[c]));
+    ctx.strokeStyle = '#7fe3ffaa'; ctx.lineWidth = 2; ctx.setLineDash([2, 5]); ctx.stroke();
+    ctx.beginPath();
+    for (let c = 0; c < SLICE.cols; c++) (c ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c), yOf(sl.targetAt(c)));
+    ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.setLineDash([10, 5]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#7fe3ff'; ctx.font = '13px system-ui, sans-serif';
+    ctx.fillText(`Echolot: Ziel −${sl.cutDepth.toFixed(2)} m (punktiert = Messung)`, 12, SLICE_TOP + 18);
+  }
   // Harte Schichten (dunkel) und Fremdstoffe (Rad)
   for (let c = 0; c < SLICE.cols; c++) {
     const i = col(c), mm = lake.mass[i];

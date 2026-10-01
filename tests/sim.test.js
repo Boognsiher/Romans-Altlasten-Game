@@ -409,3 +409,44 @@ test('Automatik hält die Pumpe selbst an der Oberfläche', () => {
   assert.ok(sim.slice.h - 3 < 0.2);
   assert.ok(sim.removed > 0);
 });
+
+test('Echolot: misst beim Ankern (mit Messfehler je Stufe), ohne Echolot kein Lot', () => {
+  const g = new Game(22); flat(g, 3);
+  let sim = g.startShift(); sim.anchor();
+  assert.equal(sim.slice.sounding, null);
+  g.levels.echolot = 1;
+  sim = g.startShift(); sim.anchor();
+  const amp = CONFIG.echolot.noise[1];
+  assert.ok(sim.slice.sounding.every((v) => Math.abs(v - 3) <= amp + 1e-6));
+  g.levels.echolot = 2;
+  sim = g.startShift(); sim.anchor();
+  assert.ok(sim.slice.sounding.every((v) => Math.abs(v - 3) <= CONFIG.echolot.noise[2] + 1e-6));
+});
+
+test('Echolot + Automatik: fährt die gewünschte Abtragsdicke an und stoppt, ohne Übertiefung', () => {
+  for (const cut of [0.5, 1.0]) {
+    const g = new Game(23); flat(g, 1); g.levels.auto = 3; g.levels.echolot = 2; g.cutDepth = cut;
+    const sim = g.startShift(); sim.anchor(); sim.toggleAuto();
+    const base = Array.from(sim.slice.sounding);
+    let t = 0;
+    while (sim.slice.auto.on && t < 600) { sim.update(0.05, {}); t += 0.05; }
+    assert.equal(sim.slice.auto.on, false, `cut ${cut}: Automatik muss von selbst fertig werden`);
+    const l = g.lake, sl = sim.slice;
+    for (let c = 0; c < 16; c++) {
+      const top = l.top[l.idx(sl.x0 + c, sl.row)];
+      assert.ok(Math.abs(top - (1 - cut)) < 0.2, `cut ${cut} Spalte ${c}: ${top}`);
+    }
+    assert.equal(sim.overdug, 0);
+    assert.ok(base.length === 16);
+  }
+});
+
+test('Abtragsdicke: Sollwert wird begrenzt und gilt für den laufenden Querschnitt', () => {
+  const g = new Game(24); flat(g, 1); g.levels.echolot = 1;
+  const sim = g.startShift(); sim.anchor();
+  sim.setCutDepth(0.5);
+  assert.equal(sim.slice.cutDepth, 0.5);
+  assert.ok(Math.abs(sim.slice.targetAt(3) - (sim.slice.sounding[3] - 0.5)) < 1e-9);
+  sim.setCutDepth(99); assert.equal(sim.cutDepth, CONFIG.echolot.maxCut);
+  sim.setCutDepth(-1); assert.equal(sim.cutDepth, CONFIG.echolot.minCut);
+});

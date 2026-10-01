@@ -15,7 +15,7 @@ const AUTO_ERRORS = [
 ];
 
 export class SliceSim {
-  constructor(lake, stats, mapX, row, rng = Math.random) {
+  constructor(lake, stats, mapX, row, rng = Math.random, cutDepth = CONFIG.echolot.defaultCut) {
     this.lake = lake;
     this.stats = stats;
     this.rng = rng;
@@ -25,6 +25,9 @@ export class SliceSim {
     this.h = Math.min(SLICE.viewH, this.surfaceAt(this.x) + 1.5); // Pumpenhöhe über Grund: schwebt, bis man sie verstellt
     this.suctioning = false;
     this.moving = false;
+    this.cutDepth = cutDepth; // gewünschte Abtragsdicke (m) für die Automatik mit Echolot
+    this.sounding = null; // Echolot: gemessene Oberfläche je Spalte vor dem Abtrag (m)
+    if (stats.echolot > 0) this.sound();
     this.blocked = false; // z. B. Puffer voll: kein Saugen
     this.tilt = 0; // Schieflage der Pumpe 0..1 (bei 1 kippt sie um)
     this.tipped = 0; // Sekunden, bis die umgekippte Pumpe wieder steht
@@ -50,12 +53,42 @@ export class SliceSim {
     return t;
   }
 
+  // Echolot: lotet alle Spalten des Fensters aus (mit Messfehler je nach Stufe)
+  sound() {
+    const amp = CONFIG.echolot.noise[this.stats.echolot] ?? 0;
+    this.sounding = new Float32Array(SLICE.cols);
+    for (let c = 0; c < SLICE.cols; c++) {
+      const i = this.lake.idx(this.x0 + c, this.row);
+      this.sounding[c] = Math.max(0, this.lake.top[i] + (this.rng() - 0.5) * 2 * amp);
+    }
+    return true;
+  }
+
+  // Zielhöhe der Spalte c (Fensterindex): Messung minus gewünschte Abtragsdicke
+  targetAt(c) { return Math.max(0, this.sounding[c] - this.cutDepth); }
+
+  // Spalte c ist fertig, wenn sie auf der Zielhöhe liegt (Spalten ausserhalb der bestellten Fläche zählen nicht)
+  colDone(c) {
+    const i = this.lake.idx(this.x0 + c, this.row);
+    return !this.lake.initial[i] || this.lake.top[i] <= this.targetAt(c) + CONFIG.echolot.doneEps;
+  }
+
+  allDone() {
+    for (let c = 0; c < SLICE.cols; c++) if (!this.colDone(c)) return false;
+    return true;
+  }
+
+  mouthCol() { return clamp(Math.floor(this.mouth().x) - this.x0, 0, SLICE.cols - 1); }
+
   toggleAuto() {
     if (this.stats.autoLevel <= 0) return false;
     this.auto.on = !this.auto.on;
     this.auto.error = null;
     this.auto.dir = this.x > this.x0 + SLICE.cols / 2 ? 'return' : 'sweep';
-    this.say('info', this.auto.on ? 'Automatik läuft. Bitte nicht aus den Augen lassen.' : 'Automatik aus.');
+    if (this.auto.on && this.stats.echolot > 0) { // vor dem Abtrag neu loten
+      this.sound();
+      this.say('info', `Echolot: Seegrund vermessen. Abtrag ${this.cutDepth.toFixed(2)} m wird angefahren.`);
+    } else this.say('info', this.auto.on ? 'Automatik läuft. Bitte nicht aus den Augen lassen.' : 'Automatik aus.');
     return true;
   }
 
@@ -83,7 +116,9 @@ export class SliceSim {
     if (lvl >= 2 && this.tilt > 0.5) return { dx: 0, dy: -1, suction: false }; // höher ziehen, bevor sie kippt
     if (a.dir === 'sweep' && this.x >= this.x0 + SLICE.cols - CONFIG.pump.offsetX - 0.05) a.dir = 'return';
     else if (a.dir === 'return' && this.x <= this.x0 + 0.05) a.dir = 'sweep';
-    return a.dir === 'sweep' ? { dx: 1, dy: 0, suction: true } : { dx: -1, dy: 0, suction: false };
+    // Mit Echolot wird nur dort gesaugt, wo die Zielhöhe noch nicht erreicht ist
+    const need = !this.sounding || !this.colDone(this.mouthCol());
+    return a.dir === 'sweep' ? { dx: 1, dy: 0, suction: need } : { dx: -1, dy: 0, suction: false };
   }
 
   // input: { dx, dy (dy>0 = nach unten), suction }
@@ -102,7 +137,10 @@ export class SliceSim {
     if (a.on) {
       const manual = Math.abs(input.dx || 0) > 0.2 || Math.abs(input.dy || 0) > 0.2;
       if (manual) { a.on = false; a.error = null; this.say('info', 'Du übernimmst das Steuer.'); }
-      else if (this.windowRemaining() < 0.05) { a.on = false; this.say('good', 'Fenster sauber. Automatik meldet Feierabend.'); }
+      else if (this.sounding ? this.allDone() : this.windowRemaining() < 0.05) {
+        a.on = false;
+        this.say('good', this.sounding ? 'Abtrag auf Sollwert erreicht. Echolot meldet: passt.' : 'Fenster sauber. Automatik meldet Feierabend.');
+      }
       else ctl = this._autoControl(dt);
     }
     const clogged = this.clog > 0;

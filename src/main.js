@@ -86,11 +86,17 @@ function syncMode() {
   $('shift-actions').hidden = !sim;
   $('btn-anchor').hidden = mode !== 'map'; $('btn-leave').hidden = mode !== 'slice';
   $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne' }[mode];
-  if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; }
+  if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; }
 }
 function anchor() { if (sim?.anchor()) syncMode(); }
 function leave() { if (sim?.leave()) syncMode(); }
 function toggleAuto() { sim?.toggleAuto(); }
+function setCut(v) {
+  if (!sim) return;
+  sim.setCutDepth(v);
+  game.cutDepth = sim.cutDepth;
+  $('cut').value = sim.cutDepth; $('cut-val').textContent = `${sim.cutDepth.toFixed(2)} m`;
+}
 function fixAuto() { sim?.fixAuto(); }
 
 function startShift() {
@@ -150,6 +156,7 @@ $('btn-anchor').onclick = anchor;
 $('btn-leave').onclick = leave;
 $('btn-auto').onclick = toggleAuto;
 $('btn-fix').onclick = fixAuto;
+$('cut').oninput = (e) => setCut(parseFloat(e.target.value));
 $('btn-wait').onclick = () => { game.advanceDays(1); renderPanel(); if (game.status !== 'playing') gameOver(); };
 
 let last = performance.now();
@@ -172,6 +179,10 @@ function frame(now) {
       if (readInput.tap('Escape', 'KeyQ')) leave();
       if (readInput.tap('KeyT')) toggleAuto();
       if (readInput.tap('KeyR')) fixAuto();
+      if (sim.stats.echolot > 0) {
+        if (readInput.tap('KeyF')) setCut(sim.cutDepth - 0.05);
+        if (readInput.tap('KeyG')) setCut(sim.cutDepth + 0.05);
+      }
     }
     sim.update(dt, inp);
     for (const n of sim.notes.splice(0)) toast(n.text, n.kind);
@@ -180,6 +191,8 @@ function frame(now) {
       $('btn-auto').hidden = sim.stats.autoLevel <= 0;
       $('btn-auto').textContent = sl.auto.on ? '🤖 Automatik aus (T)' : '🤖 Automatik an (T)';
       $('btn-fix').hidden = !sl.auto.error;
+      $('cut-box').hidden = sim.stats.echolot <= 0;
+      if (document.activeElement !== $('cut')) { $('cut').value = sim.cutDepth; $('cut-val').textContent = `${sim.cutDepth.toFixed(2)} m`; }
     }
     $('s-time').textContent = `${Math.ceil(sim.timeLeft)}s`;
     $('s-removed').textContent = `${sim.removed.toFixed(1)} m³${sim.overdug > 0.5 ? ` (zu tief: ${sim.overdug.toFixed(0)})` : ''}${sim.bufferFull ? ' – Puffer voll, Pumpe pausiert!' : ''}`;
@@ -196,7 +209,7 @@ renderPanel();
 showOverlay(`<h2>Seesanierung Uetikon</h2>
   <p>Fahre auf der <b>Karte</b> mit dem Ponton (WASD / Pfeile, Maus gedrückt) an eine Stelle und wirf den Anker (<b>E</b> / Leertaste).
   Im <b>Querschnitt</b> hängt die Pumpe an einer Kette am Ponton: A/D fährt sie seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse). Ohne Eingabe schwebt sie, wo du sie gelassen hast. Der Einsaugbereich liegt unten rechts von der Pumpe, deshalb saugt sie mit gehaltener <b>Leertaste</b> / Mausklick nur nach rechts. Gräbst du zu tief, kippt sie um: bei Schieflage die Kette hochziehen.
-  Der Rückweg saugt nicht, ist dafür schneller. <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Automatik-Reset.</p>
+  Der Rückweg saugt nicht, ist dafür schneller. <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Automatik-Reset. Mit dem <b>Echolot</b> lotet die Automatik den Seegrund aus und fährt die eingestellte Abtragsdicke an (Regler oder F/G).</p>
   <p>Schraffierte Zellen sind hart: dort brauchst du mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben und drüber fahren hilft).
   Rot = Altlasten. Die belastete Schicht ist überall genau 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, trägt sauberen Untergrund ab und zahlt dafür (orange auf der Karte). Zu viel Trübung gibt Bussen. Alle ${CONFIG.trancheEveryDays} Tage kommt eine Tranche.
   Zum Schluss nimmt die <b>Tauchdrohne</b> den Seegrund ab, erst dann gilt der See als saniert.</p>

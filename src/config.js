@@ -49,6 +49,13 @@ export const CONFIG = {
     tipSeconds: 6, // Zeit, bis die Pumpe wieder aufgerichtet ist
     repairCost: 1500, // CHF pro Umkippen (Kran, Taucher, Kaffee)
   },
+  // Echolot: lotet das Fenster vor dem Abtrag aus; die Automatik fährt die eingestellte Abtragsdicke an.
+  echolot: {
+    noise: [0, 0.12, 0.04], // Messfehler (m) je Ausbaustufe, ±
+    doneEps: 0.03, // so nah an der Zielhöhe gilt eine Spalte als fertig
+    defaultCut: 1.0, // gewünschte Abtragsdicke in m (= ganze belastete Schicht)
+    minCut: 0.1, maxCut: 1.5,
+  },
   // Tauchdrohne: Abnahme des gereinigten Seegrunds
   drone: { fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9 }, // Restschlamm (m³) pro Zelle für eine Abnahme
   pointsPerUnit: 10,
@@ -69,6 +76,7 @@ export const BASE_STATS = {
   dewater: 0.6, // Volumenanteil nach der Entwässerung (kleiner = weniger Entsorgung)
   stability: 0.7, // Standfestigkeit der Pumpe: so viele m Abtragtiefe pro gefahrene Zelle verträgt sie, ohne zu kippen
   autoLevel: 0, // Automatik-Stufe des Saugkopfs
+  echolot: 0, // Echolot-Stufe (0 = keins)
   droneBattery: 60, // Sekunden Flugzeit der Tauchdrohne
   droneRadius: 2, // Scanradius in Zellen
   droneSpeed: 5, // Zellen/s
@@ -124,6 +132,13 @@ export const UPGRADES = {
     desc: 'Pumpe steht fester und kippt später',
     maxLevel: 4, baseCost: 6000, growth: 1.5,
     apply: (s, lvl) => { s.stability += lvl * 0.25; },
+  },
+  echolot: {
+    group: 'ponton',
+    name: 'Echolot',
+    desc: 'Lotet den Seegrund vor dem Abtrag aus: die Automatik fährt die gewünschte Abtragsdicke an (Stufe 2 misst genauer)',
+    maxLevel: 2, baseCost: 12000, growth: 1.8,
+    apply: (s, lvl) => { s.echolot = lvl; },
   },
   auto: {
     group: 'ponton',

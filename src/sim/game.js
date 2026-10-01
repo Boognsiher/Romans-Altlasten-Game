@@ -18,6 +18,7 @@ export class Game {
     this.score = 0;
     this.levels = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
     this.stock = { normal: 0, toxic: 0 }; // Rohschlamm im Puffer vor der Anlage (m³)
+    this.cutDepth = CONFIG.echolot.defaultCut; // Abtragsdicke-Sollwert der Automatik (bleibt über Schichten gespeichert)
     this.overclock = false; // Anlage übertakten: mehr Durchsatz, höheres Risiko teurer Klassen
     this.totals = { removed: 0, disposalPaid: 0, finesPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
     this.status = 'playing'; // 'playing' | 'won' | 'lost'
@@ -44,7 +45,9 @@ export class Game {
   }
 
   startShift() {
-    return new DredgeSim(this.lake, this.stats, CONFIG.shiftSeconds, this.bufferRoom, this.rng);
+    const sim = new DredgeSim(this.lake, this.stats, CONFIG.shiftSeconds, this.bufferRoom, this.rng);
+    sim.cutDepth = this.cutDepth;
+    return sim;
   }
 
   // Rechnet eine beendete Schicht ab (Material geht in den Puffer) und schaltet einen Tag weiter.
