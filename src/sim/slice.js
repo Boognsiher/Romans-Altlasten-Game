@@ -24,6 +24,8 @@ export class SliceSim {
     this.suctioning = false;
     this.moving = false;
     this.blocked = false; // z. B. Puffer voll: kein Saugen
+    this.tilt = 0; // Schieflage der Pumpe 0..1 (bei 1 kippt sie um)
+    this.tipped = 0; // Sekunden, bis die umgekippte Pumpe wieder steht
     this.clog = 0; // Sekunden Zwangspause wegen Fremdstoff
     this.auto = { on: false, dir: 'sweep', error: null, errLeft: 0 };
     this.notes = []; // Meldungen für die Oberfläche: { kind, text }
@@ -35,6 +37,9 @@ export class SliceSim {
     const c = clamp(Math.floor(x), 0, this.lake.cols - 1);
     return this.lake.mass[this.lake.idx(c, this.row)];
   }
+
+  // Einsaugstelle: unten und rechts von der Pumpe (x, h = Pumpenstandort)
+  mouth() { return { x: this.x + CONFIG.pump.offsetX, h: this.h - CONFIG.pump.offsetY }; }
 
   windowRemaining() {
     let t = 0;
@@ -72,7 +77,8 @@ export class SliceSim {
     if (a.error === 'stuck') return { dx: 0, dy: 0, suction: false };
     if (a.error === 'wrongway') return { dx: -1, dy: 0, suction: true };
     if (a.error === 'high') return { dx: 0, dy: -1, suction: true };
-    if (a.dir === 'sweep' && this.x >= this.x0 + SLICE.cols - 0.05) a.dir = 'return';
+    if (lvl >= 2 && this.tilt > 0.5) return { dx: 0, dy: -1, suction: false }; // höher ziehen, bevor sie kippt
+    if (a.dir === 'sweep' && this.x >= this.x0 + SLICE.cols - CONFIG.pump.offsetX - 0.05) a.dir = 'return';
     else if (a.dir === 'return' && this.x <= this.x0 + 0.05) a.dir = 'sweep';
     return a.dir === 'sweep' ? { dx: 1, dy: 0, suction: true } : { dx: -1, dy: 0, suction: false };
   }
@@ -80,7 +86,14 @@ export class SliceSim {
   // input: { dx, dy (dy>0 = nach unten), suction }
   // Der Kopf fährt immer nur auf einer Achse (die mit dem grösseren Ausschlag).
   update(dt, input) {
-    const s = this.stats, a = this.auto, lvl = s.autoLevel;
+    const s = this.stats, a = this.auto, lvl = s.autoLevel, P = CONFIG.pump;
+    if (this.tipped > 0) { // Pumpe liegt auf der Seite und wird mit der Kette wieder aufgerichtet
+      this.tipped -= dt;
+      this.suctioning = false; this.moving = false;
+      this.h = Math.min(SLICE.viewH * 0.6, this.h + 3 * dt);
+      if (this.tipped <= 0) { this.tipped = 0; this.tilt = 0; this.say('info', 'Pumpe steht wieder. Sie tut so, als wäre nichts gewesen.'); }
+      return { removed: 0, toxicRemoved: 0 };
+    }
     let ctl = input;
     if (a.on) {
       const manual = Math.abs(input.dx || 0) > 0.2 || Math.abs(input.dy || 0) > 0.2;
@@ -102,25 +115,40 @@ export class SliceSim {
     const speed = s.speed * 1.2 * af * (working ? s.suctionSpeedFactor : along < -0.05 ? SLICE.returnBoost : 1);
 
     const oldX = this.x;
-    this.x = clamp(this.x + dx * speed * dt, this.x0, this.x0 + SLICE.cols - 1e-6);
+    this.x = clamp(this.x + dx * speed * dt, this.x0, this.x0 + SLICE.cols - P.offsetX - 1e-6);
     this.h -= dy ? dy * speed * dt : SLICE.sinkSpeed * dt; // ohne vertikale Eingabe sinkt der Kopf
     this.h = Math.max(this.surfaceAt(this.x), Math.min(this.h, SLICE.viewH)); // nicht in den Grund
 
     // Am Anschlag gibt es keine Fahrt, also auch kein Saugen (horizontal)
     this.suctioning = working && (dx === 0 || Math.abs(this.x - oldX) > 1e-9);
-    if (!this.suctioning) return { removed: 0, toxicRemoved: 0 };
+    if (!this.suctioning) {
+      this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
+      return { removed: 0, toxicRemoved: 0 };
+    }
 
-    // Fremdstoff direkt unter dem Kopf? Wer den Kopf anhebt, fährt drüber weg.
-    const di = this.lake.idx(clamp(Math.floor(this.x), 0, this.lake.cols - 1), this.row);
+    // Fremdstoff an der Einsaugstelle? Wer den Kopf anhebt, fährt drüber weg.
+    const m = this.mouth();
+    const di = this.lake.idx(clamp(Math.floor(m.x), 0, this.lake.cols - 1), this.row);
     const d = this.lake.debris[di];
-    if (d && this.h <= this.surfaceAt(this.x) + 1.5) {
+    if (d && m.h <= this.surfaceAt(m.x) + 1.5) {
       this.lake.debris[di] = 0;
       this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : CONFIG.debris.clogSeconds;
       this.suctioning = false;
       this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`);
       return { removed: 0, toxicRemoved: 0 };
     }
-    return this.lake.suckProfile(this.row, this.x, this.h, s.radius, s.power * dt);
+    const res = this.lake.suckProfile(this.row, m.x, m.h, s.radius, s.power * dt);
+
+    // Zu tief abgetragen? Pro gefahrene Zelle wird zu viel Material weggesaugt: der Boden bricht
+    // vor der Pumpe weg und sie kippt nach vorne. Höher ziehen, schneller fahren oder Ballast helfen.
+    const dist = Math.abs(this.x - oldX), cut = dist > 1e-9 ? res.removed / dist : 0;
+    if (cut > s.stability) this.tilt += (cut - s.stability) * P.tiltRate * dt;
+    else this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
+    if (this.tilt >= 1) {
+      this.tilt = 1; this.tipped = P.tipSeconds; this.suctioning = false;
+      this.say('tip', 'Pumpe gekippt! Sie liegt jetzt in der Baugrube und nennt es Mittagspause.');
+    }
+    return res;
   }
 }
 

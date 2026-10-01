@@ -23,7 +23,7 @@ Entsorgung aus den Tranchen bezahlen, Ausrüstung ausbauen.
 
 Spielregeln (Stand):
 - **Karte** zum Positionieren, **Querschnitt** zum Absaugen (gemeinsame Schichtuhr), **Drohne** zur Abnahme.
-- Saugkopf fährt auf einer Achse und saugt nur in Arbeitsrichtung; der Rückweg saugt nicht.
+- Querschnitt: Ponton so breit wie der Absaugbereich, Trübungsschutz-Kasten hängt vom Ponton, die Pumpe hängt an einer Kette (Laufkatze + Hoch/Runter). Einsaugbereich unten rechts der Pumpe, gesaugt wird nur in Arbeitsrichtung (rechts); der Rückweg saugt nicht. Wer pro gefahrene Zelle zu viel abträgt, bringt die Pumpe zum Kippen (Ballast-Upgrade hilft).
 - Harte Schichten (schraffiert) brauchen mehrere Überfahrten; Fremdstoffe verstopfen die Pumpe (Kopf anheben hilft).
 - Anlage an Land: Puffer, Durchsatz, Übertakten; jede Charge wird nach VVEA als Typ B/E/C eingestuft.
 - Automatik in drei Stufen (1 = experimentell, macht Fehler, Reset mit R), Trübungsschutz-Kasten ausbaubar.

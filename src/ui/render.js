@@ -39,17 +39,15 @@ export function drawMap(ctx, lake, sim) {
   }
   if (!sim) return;
   const px = sim.x * CELL, py = sim.y * CELL;
-  // Fenster, das der Querschnitt hier abdecken würde
+  // Ponton: so breit wie der Absaugbereich des Querschnitts
   const x0 = Math.min(Math.max(Math.round(sim.x) - SLICE.cols / 2, 0), cols - SLICE.cols);
-  ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
-  ctx.strokeRect(x0 * CELL, sim.row * CELL, SLICE.cols * CELL, CELL);
-  ctx.setLineDash([]);
+  const bx = x0 * CELL, by = sim.row * CELL, bw = SLICE.cols * CELL;
   // Schlauch zum Ufer (oben links)
   ctx.strokeStyle = '#111'; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(px * 0.4, py * 0.1, px, py); ctx.stroke();
-  // Ponton
-  ctx.fillStyle = '#d9dee3'; ctx.fillRect(px - 14, py - 9, 28, 18);
-  ctx.fillStyle = '#222'; for (let i = 0; i < 3; i++) ctx.fillRect(px - 12 + i * 9, py + 6, 6, 4);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(px * 0.4, py * 0.1, bx + bw / 2, by + CELL / 2); ctx.stroke();
+  ctx.fillStyle = '#d9dee3cc'; ctx.fillRect(bx, by + 2, bw, CELL - 4);
+  ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.strokeRect(bx, by + 2, bw, CELL - 4);
+  ctx.fillStyle = '#222'; for (let i = 0; i < SLICE.cols; i++) { ctx.beginPath(); ctx.arc(bx + (i + 0.5) * CELL, by + CELL / 2, 3, 0, Math.PI * 2); ctx.fill(); }
   turbidityVeil(ctx, sim, cols * CELL, rows * CELL);
 }
 
@@ -65,7 +63,8 @@ export function drawDrone(ctx, drone) {
 
 // ---------- Instanz 2: Querschnitt ----------
 const yOf = (h) => SLICE_TOP + (SLICE.viewH - h) * U;
-export function sliceHeadScreen(sl) { return { x: (sl.x - sl.x0) * U, y: yOf(sl.h) }; }
+export function sliceHeadScreen(sl) { return { x: (sl.x - sl.x0) * U, y: yOf(sl.h) }; } // Pumpenstandort
+export function sliceMouthScreen(sl) { const m = sl.mouth(); return { x: (m.x - sl.x0) * U, y: yOf(m.h) }; } // Einsaugstelle
 
 export function drawSlice(ctx, lake, sim) {
   const sl = sim.slice, W = SLICE.cols * U, H = SLICE_TOP + SLICE.viewH * U + BEDROCK;
@@ -112,33 +111,51 @@ export function drawSlice(ctx, lake, sim) {
     ctx.fillStyle = '#e9d36a'; ctx.fillRect(cx - 14, cy - 4, 28, 6);
     ctx.strokeStyle = '#3a0f0b'; ctx.lineWidth = 2; ctx.strokeRect(cx - 14, cy - 17, 28, 34);
   }
-  // Ponton oben, Schlauch zum Saugkopf
-  const pxm = W / 2, head = sliceHeadScreen(sl);
-  ctx.strokeStyle = '#111'; ctx.lineWidth = 8;
-  ctx.beginPath(); ctx.moveTo(pxm, 52); ctx.quadraticCurveTo(pxm, head.y - 40, head.x, head.y - 14); ctx.stroke();
-  ctx.fillStyle = '#d9dee3'; ctx.fillRect(pxm - 70, 26, 140, 30);
-  ctx.fillStyle = '#222'; for (let i = 0; i < 5; i++) ctx.beginPath(), ctx.arc(pxm - 56 + i * 28, 42, 7, 0, Math.PI * 2), ctx.fill();
-  ctx.fillStyle = '#9aa6b0'; ctx.fillRect(pxm - 20, 8, 40, 20);
-  // Trübungsschutz: Kasten um den Saugkopf, wächst mit der Ausbaustufe
+  // Ponton: so breit wie der Absaugbereich, mit Reifen als Fender
+  const pump = sliceHeadScreen(sl), mouth = sliceMouthScreen(sl);
+  ctx.fillStyle = '#d9dee3'; ctx.fillRect(0, 26, W, 30);
+  ctx.fillStyle = '#222';
+  for (let i = 0; i < SLICE.cols; i++) { ctx.beginPath(); ctx.arc((i + 0.5) * U, 46, 7, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#9aa6b0'; ctx.fillRect(W / 2 - 22, 8, 44, 20);
+  // Trübungsschutz: Kasten, der vom Ponton nach unten kommt; tiefer mit jeder Ausbaustufe
   const lvl = Math.round(sim.stats.curtain / 0.2);
   if (lvl > 0) {
-    const bw = U * (0.7 + 0.3 * lvl), top = head.y - 70;
-    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(head.x - bw, top, bw * 2, head.y + 10 - top);
-    ctx.strokeStyle = '#c9d2d8'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(head.x - bw, top); ctx.lineTo(head.x - bw, head.y + 10); ctx.moveTo(head.x + bw, top); ctx.lineTo(head.x + bw, head.y + 10); ctx.moveTo(head.x - bw, top); ctx.lineTo(head.x + bw, top); ctx.stroke();
+    const bottom = SLICE_TOP + SLICE.viewH * U * (0.18 + 0.2 * lvl);
+    ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(0, 56, W, bottom - 56);
+    ctx.strokeStyle = '#c9d2d8'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(2, 56); ctx.lineTo(2, bottom); ctx.moveTo(W - 2, 56); ctx.lineTo(W - 2, bottom); ctx.stroke();
+    ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
+    ctx.beginPath(); ctx.moveTo(2, bottom); ctx.lineTo(W - 2, bottom); ctx.stroke(); ctx.setLineDash([]);
   }
-  // Saugkopf, Radius, Sog
+  // Laufkatze auf dem Ponton, Kette zur Pumpe, Schlauch zum Ponton
+  ctx.fillStyle = '#556'; ctx.fillRect(pump.x - 14, 54, 28, 10);
+  ctx.strokeStyle = '#b9c0c6'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.moveTo(pump.x, 64); ctx.lineTo(pump.x, pump.y - 30); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(W / 2, 52); ctx.quadraticCurveTo(W / 2, pump.y - 50, pump.x + 8, pump.y - 26); ctx.stroke();
+  // Pumpe (kippt nach rechts, wenn sie zu tief gräbt); Einsaugstelle unten rechts
+  ctx.save();
+  ctx.translate(pump.x, pump.y); ctx.rotate(sl.tilt * 0.55 + (sl.tipped > 0 ? 0.6 : 0));
+  ctx.fillStyle = '#2b2f33'; ctx.fillRect(-14, -28, 28, 28);
+  ctx.fillStyle = '#7a828a'; ctx.fillRect(-14, -4, 28, 4); ctx.fillRect(-4, -34, 8, 8);
+  ctx.restore();
+  ctx.strokeStyle = '#555c63'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(pump.x + 10, pump.y - 8); ctx.lineTo(mouth.x - 6, mouth.y - 2); ctx.stroke(); ctx.lineCap = 'butt';
+  ctx.fillStyle = '#2b2f33'; ctx.fillRect(mouth.x - 14, mouth.y - 4, 28, 8);
+  // Saugradius und Sog an der Einsaugstelle
   ctx.strokeStyle = sl.suctioning ? '#7fe3ff' : '#ffffff44'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
-  ctx.beginPath(); ctx.arc(head.x, head.y, sim.stats.radius * U, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(mouth.x, mouth.y, sim.stats.radius * U, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   if (sl.suctioning) {
     ctx.fillStyle = '#7fe3ff55';
-    ctx.beginPath(); ctx.moveTo(head.x - 14, head.y); ctx.lineTo(head.x - 40, head.y + 22); ctx.lineTo(head.x + 40, head.y + 22); ctx.lineTo(head.x + 14, head.y); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(mouth.x - 12, mouth.y + 4); ctx.lineTo(mouth.x - 30, mouth.y + 28); ctx.lineTo(mouth.x + 40, mouth.y + 28); ctx.lineTo(mouth.x + 12, mouth.y + 4); ctx.fill();
   }
-  ctx.fillStyle = '#2b2f33'; ctx.fillRect(head.x - 14, head.y - 14, 28, 14);
-  ctx.fillStyle = '#555c63'; ctx.fillRect(head.x - 18, head.y - 4, 36, 6);
+  if (sl.tipped > 0 || sl.tilt > 0.05) {
+    ctx.fillStyle = sl.tipped > 0 || sl.tilt > 0.6 ? '#ff7a6b' : '#ffd24d'; ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.fillText(sl.tipped > 0 ? 'UMGEKIPPT!' : 'Schieflage', Math.max(8, pump.x - 40), Math.max(96, pump.y - 62));
+  }
   if (sl.clog > 0) {
     ctx.fillStyle = '#ff7a6b'; ctx.font = 'bold 18px system-ui, sans-serif';
-    ctx.fillText(`VERSTOPFT ${sl.clog.toFixed(1)}s`, Math.max(8, head.x - 60), Math.max(90, head.y - 82));
+    ctx.fillText(`VERSTOPFT ${sl.clog.toFixed(1)}s`, Math.max(8, pump.x - 60), Math.max(116, pump.y - 80));
   }
   if (sl.auto.on) {
     ctx.fillStyle = sl.auto.error ? '#ff7a6b' : '#7bd88f'; ctx.font = 'bold 16px system-ui, sans-serif';
@@ -146,7 +163,7 @@ export function drawSlice(ctx, lake, sim) {
   }
   // Arbeitsrichtung: nur nach rechts (und nach unten) wird gesaugt
   ctx.fillStyle = sl.suctioning ? '#7fe3ff' : '#ffffff66';
-  ctx.beginPath(); ctx.moveTo(head.x + 24, head.y - 14); ctx.lineTo(head.x + 40, head.y - 7); ctx.lineTo(head.x + 24, head.y); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(mouth.x + 20, mouth.y - 10); ctx.lineTo(mouth.x + 36, mouth.y - 3); ctx.lineTo(mouth.x + 20, mouth.y + 4); ctx.fill();
   ctx.fillStyle = '#ffffff55'; ctx.font = '14px system-ui, sans-serif';
   ctx.fillText('Arbeitsrichtung ▶  (Rückweg saugt nicht)', 12, SLICE_TOP - 8);
   turbidityVeil(ctx, sim, W, H);

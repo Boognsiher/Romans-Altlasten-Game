@@ -12,6 +12,8 @@ export class DredgeSim {
     this.rng = rng;
     this.notes = []; // Meldungen aus dem Querschnitt (Verstopfung, Automatik ...)
     this.clogs = 0;
+    this.tips = 0; // wie oft die Pumpe umgekippt ist
+    this.repairs = 0; // CHF dafür
     this.bufferRoom = bufferRoom; // so viel m³ passen noch in den Puffer vor der Anlage
     this.timeLeft = shiftSeconds;
     this.mode = 'map';
@@ -62,7 +64,7 @@ export class DredgeSim {
     } else {
       this.slice.blocked = this.bufferFull; // Puffer voll: auch die Automatik darf nicht saugen
       const r = this.slice.update(dt, input);
-      for (const n of this.slice.notes.splice(0)) { this.notes.push(n); if (n.kind === 'clog') this.clogs++; }
+      for (const n of this.slice.notes.splice(0)) { this.notes.push(n); if (n.kind === 'clog') this.clogs++; if (n.kind === 'tip') { this.tips++; this.repairs += CONFIG.pump.repairCost; } }
       this.removed += r.removed;
       this.toxicRemoved += r.toxicRemoved;
       if (this.slice.suctioning) {
@@ -81,7 +83,7 @@ export class DredgeSim {
 
   // Ergebnis der Schicht: Abrechnung macht Game.
   result() {
-    return { removed: this.removed, toxicRemoved: this.toxicRemoved, fines: Math.round(this.fines), clogs: this.clogs };
+    return { removed: this.removed, toxicRemoved: this.toxicRemoved, fines: Math.round(this.fines), clogs: this.clogs, tips: this.tips, repairs: this.repairs };
   }
 }
 

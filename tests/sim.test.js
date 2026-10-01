@@ -250,3 +250,54 @@ test('Trübungsschutz senkt die Trübung', () => {
   };
   assert.ok(run(4) < run(0));
 });
+
+test('Einsaugstelle liegt unten rechts der Pumpe; links der Pumpe wird nichts gesaugt', () => {
+  const g = new Game(15); const lake = flat(g, 0);
+  const sim = g.startShift(); sim.anchor();
+  const sl = sim.slice, P = CONFIG.pump;
+  sl.x = sl.x0 + 10; sl.h = 4;
+  const m = sl.mouth();
+  assert.equal(m.x, sl.x + P.offsetX);
+  assert.equal(m.h, sl.h - P.offsetY);
+  for (let c = 0; c < 8; c++) lake.mass[lake.idx(sl.x0 + c, sl.row)] = 5; // nur links der Pumpe
+  sim.update(0.2, { dx: 1, dy: 0, suction: true });
+  assert.equal(sim.removed, 0);
+  lake.mass[lake.idx(sl.x0 + 12, sl.row)] = 5; // rechts der Pumpe
+  sl.h = 5;
+  sim.update(0.2, { dx: 1, dy: 0, suction: true });
+  assert.ok(sim.removed > 0);
+});
+
+test('Zu tiefes Abtragen: Schieflage steigt, Pumpe kippt um und kostet Bergung', () => {
+  const g = new Game(16); flat(g, 8);
+  const sim = g.startShift(); sim.anchor();
+  sim.stats.power = 30; // brutale Pumpe
+  sim.slice.h = 8;
+  let max = 0;
+  for (let t = 0; t < 4 && sim.tips === 0; t += 0.05) { sim.update(0.05, { dx: 1, dy: 0, suction: true }); max = Math.max(max, sim.slice.tilt); }
+  assert.ok(max > 0.3);
+  assert.equal(sim.tips, 1);
+  assert.equal(sim.repairs, CONFIG.pump.repairCost);
+  const before = sim.removed;
+  sim.update(0.5, { dx: 1, dy: 0, suction: true });
+  assert.equal(sim.removed, before); // liegt auf der Seite
+  const money = g.money; sim.timeLeft = 0; sim.over = true;
+  g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a });
+  g.finishShift(sim);
+  assert.ok(g.money <= money - CONFIG.pump.repairCost);
+});
+
+test('Sanftes Abtragen mit der Standardpumpe kippt nicht', () => {
+  const g = new Game(17); flat(g, 5);
+  const sim = g.startShift(); sim.anchor(); sim.slice.h = 5;
+  for (let p = 0; p < 4; p++) { sweep(sim, 6, 1); sweep(sim, 6, -1); }
+  assert.equal(sim.tips, 0);
+});
+
+test('Automatik ab Stufe 2 zieht die Pumpe bei Schieflage hoch', () => {
+  const g = new Game(18); flat(g, 8); g.levels.auto = 2;
+  const sim = g.startShift(); sim.anchor(); sim.stats.power = 12;
+  sim.toggleAuto();
+  for (let i = 0; i < 400; i++) sim.update(0.05, {});
+  assert.equal(sim.tips, 0);
+});

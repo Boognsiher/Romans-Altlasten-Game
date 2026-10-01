@@ -54,12 +54,13 @@ export class Game {
     const points = Math.round((normal + toxic * CONFIG.toxicPointsMultiplier) * CONFIG.pointsPerUnit);
     this.stock.normal += normal;
     this.stock.toxic += toxic;
-    this.money -= r.fines;
+    this.money -= r.fines + r.repairs;
     this.score += points;
     this.totals.removed += r.removed;
     this.totals.finesPaid += r.fines;
     this.say(`Schicht: ${r.removed.toFixed(1)} m³ abgesaugt, +${points} Punkte`);
     if (r.clogs) this.say(`${r.clogs}× Pumpe verstopft (Fremdstoffe)`, 'bad');
+    if (r.tips) this.say(`Pumpe ${r.tips}× umgekippt, Bergung −${r.repairs} CHF`, 'bad');
     if (r.fines) this.say(`Trübungs-Busse −${r.fines} CHF`, 'bad');
     this.advanceDays(1);
     return { ...r, points };

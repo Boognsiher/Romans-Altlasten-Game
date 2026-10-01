@@ -31,6 +31,15 @@ export const CONFIG = {
     errorSeconds: 6, // so lange läuft ein Fehler, wenn niemand eingreift
     clogSeconds: [3, 5, 3, 1.5],
   },
+  // Pumpe an der Kette: Einsaugbereich liegt unten rechts. Wer zu tief abträgt, bringt sie zum Kippen.
+  pump: {
+    offsetX: 1.0, // Einsaugbereich rechts der Pumpe (Zellen)
+    offsetY: 0.6, // und unterhalb (Einheiten)
+    tiltRate: 0.6, // Schieflage pro Sekunde und Einheit Abtragtiefe (m³ pro gefahrene Zelle) über der Standfestigkeit
+    tiltRecover: 0.4, // Erholung pro Sekunde
+    tipSeconds: 6, // Zeit, bis die Pumpe wieder aufgerichtet ist
+    repairCost: 1500, // CHF pro Umkippen (Kran, Taucher, Kaffee)
+  },
   // Tauchdrohne: Abnahme des gereinigten Seegrunds
   drone: { fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9 }, // Restschlamm (m³) pro Zelle für eine Abnahme
   pointsPerUnit: 10,
@@ -49,6 +58,7 @@ export const BASE_STATS = {
   plantCapacity: 50, // m³/Tag, die die Anlage verarbeitet
   bufferCapacity: 150, // m³ Puffer vor der Anlage; ist er voll, muss das Saugen pausieren
   dewater: 0.6, // Volumenanteil nach der Entwässerung (kleiner = weniger Entsorgung)
+  stability: 2.0, // Standfestigkeit der Pumpe: so viel m³ pro gefahrene Zelle darf sie abtragen, ohne zu kippen
   autoLevel: 0, // Automatik-Stufe des Saugkopfs
   droneBattery: 60, // Sekunden Flugzeit der Tauchdrohne
   droneRadius: 2, // Scanradius in Zellen
@@ -98,6 +108,13 @@ export const UPGRADES = {
     desc: 'Trockeneres Material, weniger Entsorgungsvolumen',
     maxLevel: 4, baseCost: 9000, growth: 1.6,
     apply: (s, lvl) => { s.dewater = Math.max(0.3, s.dewater - lvl * 0.07); },
+  },
+  ballast: {
+    group: 'ponton',
+    name: 'Pumpen-Ballast',
+    desc: 'Pumpe steht fester und kippt später',
+    maxLevel: 4, baseCost: 6000, growth: 1.5,
+    apply: (s, lvl) => { s.stability += lvl * 0.9; },
   },
   auto: {
     group: 'ponton',

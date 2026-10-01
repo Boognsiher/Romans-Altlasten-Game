@@ -117,7 +117,7 @@ function endShift() {
   showOverlay(`<h2>Schicht beendet</h2>
     <p>${r.removed.toFixed(1)} m³ abgesaugt (davon ${r.toxicRemoved.toFixed(1)} m³ Altlasten)<br>
     +${r.points} Punkte · Der Schlamm wartet im Puffer auf die Anlage
-    ${r.clogs ? `<br>${r.clogs}× Pumpe verstopft` : ''}${r.fines ? `<br>Busse −${chf(r.fines)}` : ''}</p>
+    ${r.clogs ? `<br>${r.clogs}× Pumpe verstopft` : ''}${r.tips ? `<br>${r.tips}× Pumpe umgekippt, Bergung −${chf(r.repairs)}` : ''}${r.fines ? `<br>Busse −${chf(r.fines)}` : ''}</p>
     <button class="primary" id="btn-ok">Weiter</button>`);
   $('btn-ok').onclick = hideOverlay;
 }
@@ -159,7 +159,7 @@ function frame(now) {
     drone.update(dt, readInput.read({ x: drone.x * CELL, y: drone.y * CELL }, { holdToMove: true }));
     $('s-time').textContent = `${Math.ceil(drone.timeLeft)}s`;
     $('s-removed').textContent = `${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
-    $('s-turb').value = 0;
+    $('s-turb').value = 0; $('s-tilt').value = 0;
     if (drone.over) endDrone();
   } else if (sim) {
     const inMap = sim.mode === 'map';
@@ -184,6 +184,7 @@ function frame(now) {
     $('s-time').textContent = `${Math.ceil(sim.timeLeft)}s`;
     $('s-removed').textContent = `${sim.removed.toFixed(1)} m³${sim.bufferFull ? ' – Puffer voll, Pumpe pausiert!' : ''}`;
     $('s-turb').value = sim.turbidity;
+    $('s-tilt').value = sim.mode === 'slice' ? sim.slice.tilt : 0;
     if (sim.over) endShift();
   }
   readInput.endFrame();
@@ -194,7 +195,7 @@ function frame(now) {
 renderPanel();
 showOverlay(`<h2>Seesanierung Uetikon</h2>
   <p>Fahre auf der <b>Karte</b> mit dem Ponton (WASD / Pfeile, Maus gedrückt) an eine Stelle und wirf den Anker (<b>E</b> / Leertaste).
-  Im <b>Querschnitt</b> fährt der Saugkopf wie ein Schlitten auf einer Achse (A/D bzw. W/S) und saugt mit gehaltener <b>Leertaste</b> / Mausklick nur nach rechts.
+  Im <b>Querschnitt</b> hängt die Pumpe an einer Kette am Ponton: A/D fährt sie seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse). Der Einsaugbereich liegt unten rechts von der Pumpe, deshalb saugt sie mit gehaltener <b>Leertaste</b> / Mausklick nur nach rechts. Gräbst du zu tief, kippt sie um: bei Schieflage die Kette hochziehen.
   Der Rückweg saugt nicht, ist dafür schneller. <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Automatik-Reset.</p>
   <p>Schraffierte Zellen sind hart: dort brauchst du mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben und drüber fahren hilft).
   Rot = Altlasten. Zu viel Trübung gibt Bussen. Alle ${CONFIG.trancheEveryDays} Tage kommt eine Tranche.
