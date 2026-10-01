@@ -1,6 +1,7 @@
 import { CONFIG, UPGRADES } from '../config.js';
 import { Lake } from './lake.js';
 import { DredgeSim } from './dredge.js';
+import { DroneSim } from './drone.js';
 import { EVENTS } from './events.js';
 import { computeStats, upgradeCost } from './stats.js';
 import { createRng } from './rng.js';
@@ -43,7 +44,7 @@ export class Game {
   }
 
   startShift() {
-    return new DredgeSim(this.lake, this.stats, CONFIG.shiftSeconds, this.bufferRoom);
+    return new DredgeSim(this.lake, this.stats, CONFIG.shiftSeconds, this.bufferRoom, this.rng);
   }
 
   // Rechnet eine beendete Schicht ab (Material geht in den Puffer) und schaltet einen Tag weiter.
@@ -58,9 +59,20 @@ export class Game {
     this.totals.removed += r.removed;
     this.totals.finesPaid += r.fines;
     this.say(`Schicht: ${r.removed.toFixed(1)} m³ abgesaugt, +${points} Punkte`);
+    if (r.clogs) this.say(`${r.clogs}× Pumpe verstopft (Fremdstoffe)`, 'bad');
     if (r.fines) this.say(`Trübungs-Busse −${r.fines} CHF`, 'bad');
     this.advanceDays(1);
     return { ...r, points };
+  }
+
+  startDrone() { return new DroneSim(this.lake, this.stats); }
+
+  // Drohnenflug abrechnen: kostet einen Tag und eine Pauschale
+  finishDrone(sim) {
+    this.money -= CONFIG.drone.fee;
+    this.say(`Drohne: ${sim.newlyAccepted} Zellen abgenommen, ${sim.newlyFlagged} mit Restschmutz gemeldet. Einsatz −${CONFIG.drone.fee} CHF`, sim.newlyFlagged ? 'bad' : 'good');
+    this.advanceDays(1);
+    return { accepted: sim.newlyAccepted, flagged: sim.newlyFlagged };
   }
 
   // Anlage verarbeitet täglich bis zur Kapazität; jede Charge wird analysiert und entsorgt.
@@ -96,7 +108,7 @@ export class Game {
   }
 
   checkEnd() {
-    if (this.lake.cleanFraction() >= CONFIG.winCleanFraction) {
+    if (this.lake.cleanFraction() >= CONFIG.winCleanFraction && this.lake.acceptedFraction() >= CONFIG.drone.winAcceptFraction) {
       this.status = 'won'; this.say('See saniert! 🎉', 'good');
     } else if (this.money < CONFIG.bankruptcyLimit) {
       this.status = 'lost'; this.say('Budget überschritten – Projekt gestoppt.', 'bad');

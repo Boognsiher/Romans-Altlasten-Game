@@ -6,9 +6,12 @@ import { SliceSim } from './slice.js';
 //  - mode 'slice': Querschnitt an der Ankerposition, hier wird abgesaugt
 // Reine Simulation ohne Rendering/DOM (deshalb testbar).
 export class DredgeSim {
-  constructor(lake, stats, shiftSeconds = CONFIG.shiftSeconds, bufferRoom = Infinity) {
+  constructor(lake, stats, shiftSeconds = CONFIG.shiftSeconds, bufferRoom = Infinity, rng = Math.random) {
     this.lake = lake;
     this.stats = stats;
+    this.rng = rng;
+    this.notes = []; // Meldungen aus dem Querschnitt (Verstopfung, Automatik ...)
+    this.clogs = 0;
     this.bufferRoom = bufferRoom; // so viel m³ passen noch in den Puffer vor der Anlage
     this.timeLeft = shiftSeconds;
     this.mode = 'map';
@@ -29,10 +32,13 @@ export class DredgeSim {
   // Anker werfen: Querschnitt an der aktuellen Position öffnen
   anchor() {
     if (this.over || this.mode !== 'map') return false;
-    this.slice = new SliceSim(this.lake, this.stats, this.x, this.row);
+    this.slice = new SliceSim(this.lake, this.stats, this.x, this.row, this.rng);
     this.mode = 'slice';
     return true;
   }
+
+  toggleAuto() { return this.mode === 'slice' && this.slice.toggleAuto(); }
+  fixAuto() { return this.mode === 'slice' && this.slice.fixAuto(); }
 
   // Anker lichten: zurück zur Karte
   leave() {
@@ -54,7 +60,9 @@ export class DredgeSim {
       this.x = clamp(this.x + dx * s.speed * dt, 0, this.lake.cols);
       this.y = clamp(this.y + dy * s.speed * dt, 0, this.lake.rows);
     } else {
-      const r = this.slice.update(dt, { ...input, suction: input.suction && !this.bufferFull });
+      this.slice.blocked = this.bufferFull; // Puffer voll: auch die Automatik darf nicht saugen
+      const r = this.slice.update(dt, input);
+      for (const n of this.slice.notes.splice(0)) { this.notes.push(n); if (n.kind === 'clog') this.clogs++; }
       this.removed += r.removed;
       this.toxicRemoved += r.toxicRemoved;
       if (this.slice.suctioning) {
@@ -73,7 +81,7 @@ export class DredgeSim {
 
   // Ergebnis der Schicht: Abrechnung macht Game.
   result() {
-    return { removed: this.removed, toxicRemoved: this.toxicRemoved, fines: Math.round(this.fines) };
+    return { removed: this.removed, toxicRemoved: this.toxicRemoved, fines: Math.round(this.fines), clogs: this.clogs };
   }
 }
 

@@ -20,6 +20,19 @@ export const CONFIG = {
     baseProb: { B: 0.65, E: 0.28, C: 0.07 },
     riskShift: { E: 0.3, C: 0.35 }, // bei Risiko 1: so viel Wahrscheinlichkeit wandert von B zu E bzw. C
   },
+  // Harte Schichten: Absaugleistung dort geteilt durch (1 + Härte * factor) -> mehrere Überfahrten
+  hard: { blobs: 7, factor: 1.5 },
+  // Fremdstoffe verstopfen die Pumpe (Sekunden Zwangspause, Fremdstoff ist danach weg)
+  debris: { count: 28, clogSeconds: 3 },
+  // Automatik: Stufe 0 = Handbetrieb, 1 = experimentell, 2 = zuverlässig, 3 = voll
+  auto: {
+    speedFactor: [1, 0.8, 1, 1.25],
+    errorRate: [0, 0.08, 0.025, 0], // Fehler pro Sekunde Automatikbetrieb
+    errorSeconds: 6, // so lange läuft ein Fehler, wenn niemand eingreift
+    clogSeconds: [3, 5, 3, 1.5],
+  },
+  // Tauchdrohne: Abnahme des gereinigten Seegrunds
+  drone: { fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9 }, // Restschlamm (m³) pro Zelle für eine Abnahme
   pointsPerUnit: 10,
   toxicPointsMultiplier: 3,
   turbidityFineThreshold: 0.7,
@@ -36,6 +49,10 @@ export const BASE_STATS = {
   plantCapacity: 50, // m³/Tag, die die Anlage verarbeitet
   bufferCapacity: 150, // m³ Puffer vor der Anlage; ist er voll, muss das Saugen pausieren
   dewater: 0.6, // Volumenanteil nach der Entwässerung (kleiner = weniger Entsorgung)
+  autoLevel: 0, // Automatik-Stufe des Saugkopfs
+  droneBattery: 60, // Sekunden Flugzeit der Tauchdrohne
+  droneRadius: 2, // Scanradius in Zellen
+  droneSpeed: 5, // Zellen/s
 };
 
 // Jedes Upgrade: Stufe n kostet baseCost * growth^n, wirkt über apply()
@@ -63,8 +80,8 @@ export const UPGRADES = {
   },
   curtain: {
     group: 'ponton',
-    name: 'Schlammschürze',
-    desc: 'Weniger Trübung, weniger Bussen',
+    name: 'Trübungsschutz',
+    desc: 'Kasten um den Saugkopf: weniger Trübung, weniger Bussen',
     maxLevel: 4, baseCost: 7000, growth: 1.6,
     apply: (s, lvl) => { s.curtain = Math.min(0.8, lvl * 0.2); },
   },
@@ -82,4 +99,23 @@ export const UPGRADES = {
     maxLevel: 4, baseCost: 9000, growth: 1.6,
     apply: (s, lvl) => { s.dewater = Math.max(0.3, s.dewater - lvl * 0.07); },
   },
+  auto: {
+    group: 'ponton',
+    name: 'Automatik',
+    desc: 'Stufe 1 experimentell (überwachen!), 2 zuverlässig, 3 voll',
+    maxLevel: 3, baseCost: 15000, growth: 1.8,
+    apply: (s, lvl) => { s.autoLevel = lvl; },
+  },
+  drone: {
+    group: 'drone',
+    name: 'Tauchdrohne',
+    desc: 'Mehr Akku und grössere Scanfläche',
+    maxLevel: 4, baseCost: 6000, growth: 1.5,
+    apply: (s, lvl) => { s.droneBattery += lvl * 15; s.droneRadius += lvl * 0.4; },
+  },
 };
+
+// Fremdstoffe im See (Index = Wert in lake.debris - 1)
+export const DEBRIS = [
+  'Einkaufswagen', 'Velo', 'Gartenzwerg', 'Bürostuhl', 'Fischerhut von 1987', 'Stossstange', 'Kinderwagen (leer, hoffentlich)',
+];

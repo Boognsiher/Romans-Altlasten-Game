@@ -14,6 +14,7 @@
       <span>Budget <b id="h-money"></b></span>
       <span>Punkte <b id="h-score"></b></span>
       <span>Sauber <b id="h-clean"></b></span>
+      <span>Abgenommen <b id="h-acc"></b></span>
     </div>
   </header>
 
@@ -29,7 +30,10 @@
       <div id="shift-actions" hidden>
         <button id="btn-anchor" class="primary">⚓ Anker werfen (E)</button>
         <button id="btn-leave">↩ Zurück zur Karte (Q)</button>
+        <button id="btn-auto">🤖 Automatik an (T)</button>
+        <button id="btn-fix" class="primary">🔧 Reset (R)</button>
       </div>
+      <div id="toast"></div>
       <div id="overlay"></div>
     </section>
 
@@ -38,6 +42,7 @@
       <div id="plant"></div>
       <div id="upgrades"></div>
       <button id="btn-start" class="primary">Schicht starten</button>
+      <button id="btn-drone">Drohne tauchen lassen (1 Tag)</button>
       <button id="btn-wait">Tag aussetzen</button>
       <h2>Journal</h2>
       <ul id="log"></ul>

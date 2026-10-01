@@ -1,4 +1,4 @@
-import { CONFIG } from '../config.js';
+import { CONFIG, DEBRIS } from '../config.js';
 
 // Seegrund als Raster. Jede Zelle enthält Schlamm (m³); toxic-Zellen sind Altlasten (Fässer).
 export class Lake {
@@ -7,6 +7,11 @@ export class Lake {
     this.rows = rows;
     this.mass = new Float32Array(cols * rows);
     this.toxic = new Uint8Array(cols * rows);
+    this.hard = new Uint8Array(cols * rows); // 0 weich, 1 verdichtet, 2 hart (mehrere Überfahrten)
+    this.debris = new Uint8Array(cols * rows); // 0 nichts, sonst Index in DEBRIS + 1
+    this.initial = new Uint8Array(cols * rows); // 1 = Zelle gehörte zur abzutragenden Schicht
+    this.accepted = new Uint8Array(cols * rows); // von der Drohne abgenommen
+    this.flagged = new Uint8Array(cols * rows); // Drohne meldet Restschmutz
     this.initialTotal = 0;
   }
 
@@ -29,6 +34,20 @@ export class Lake {
     for (let i = 0; i < cfg.toxicBlobs; i++) {
       blob(rng.range(2, lake.cols - 2), rng.range(2, lake.rows - 2), rng.range(1.5, 3), rng.range(4, 8), true);
     }
+    for (let i = 0; i < CONFIG.hard.blobs; i++) {
+      const cx = rng.range(0, lake.cols), cy = rng.range(0, lake.rows), r = rng.range(2.5, 5);
+      for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(lake.rows - 1, Math.ceil(cy + r)); y++) {
+        for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(lake.cols - 1, Math.ceil(cx + r)); x++) {
+          const d = Math.hypot(x - cx, y - cy) / r, k = lake.idx(x, y);
+          if (d < 1 && lake.mass[k] > 0) lake.hard[k] = Math.max(lake.hard[k], d < 0.5 ? 2 : 1);
+        }
+      }
+    }
+    for (let n = 0, tries = 0; n < CONFIG.debris.count && tries < 1000; tries++) {
+      const k = lake.idx(rng.int(0, lake.cols - 1), rng.int(0, lake.rows - 1));
+      if (lake.mass[k] > 0.5 && !lake.debris[k]) { lake.debris[k] = rng.int(1, DEBRIS.length); n++; }
+    }
+    for (let i = 0; i < lake.mass.length; i++) lake.initial[i] = lake.mass[i] > 0 ? 1 : 0;
     lake.initialTotal = lake.remaining();
     return lake;
   }
@@ -39,6 +58,13 @@ export class Lake {
     let s = 0;
     for (let i = 0; i < this.mass.length; i++) s += this.mass[i];
     return s;
+  }
+
+  // Anteil der ursprünglich belasteten Zellen, die die Drohne abgenommen hat (0..1)
+  acceptedFraction() {
+    let n = 0, ok = 0;
+    for (let i = 0; i < this.initial.length; i++) if (this.initial[i]) { n++; if (this.accepted[i]) ok++; }
+    return n ? ok / n : 1;
   }
 
   // Anteil bereits entfernten Materials (0..1)
@@ -53,14 +79,15 @@ export class Lake {
     for (const c of cells) wSum += c[1];
     if (wSum === 0) return { removed, toxicRemoved };
     for (const [i, w] of cells) {
-      const take = Math.min(this.mass[i], (amount * w) / wSum);
+      // harte Schichten: gleiche Pumpenleistung bringt dort weniger
+      const take = Math.min(this.mass[i], ((amount * w) / wSum) / (1 + this.hard[i] * CONFIG.hard.factor));
       this.mass[i] -= take;
       removed += take;
       if (this.toxic[i]) toxicRemoved += take;
       if (this.mass[i] < 1e-4) {
         removed += this.mass[i];
         if (this.toxic[i]) toxicRemoved += this.mass[i];
-        this.mass[i] = 0; this.toxic[i] = 0;
+        this.mass[i] = 0; this.toxic[i] = 0; this.hard[i] = 0;
       }
     }
     return { removed, toxicRemoved };

@@ -6,6 +6,7 @@ import { Game } from '../src/sim/game.js';
 import { DredgeSim } from '../src/sim/dredge.js';
 import { CONFIG } from '../src/config.js';
 import { computeStats } from '../src/sim/stats.js';
+import { DroneSim } from '../src/sim/drone.js';
 import { classProbabilities, runPlantDay } from '../src/sim/plant.js';
 
 test('rng ist deterministisch', () => {
@@ -69,7 +70,7 @@ test('Querschnitt: Saugkopf dringt nicht in den Grund, Fenster liegt im See', ()
 
 test('Querschnitt: Saugkopf in der Höhe saugt nichts', () => {
   const lake = Lake.generate(createRng(1));
-  lake.mass.fill(2);
+  lake.mass.fill(2); lake.hard.fill(0);
   assert.equal(lake.suckProfile(5, 10, 12, 1.8, 100).removed, 0);
   const r = lake.suckProfile(5, 10, 2, 1.8, 3);
   assert.ok(Math.abs(r.removed - 3) < 1e-6);
@@ -155,4 +156,97 @@ test('Querschnitt: Saugen nur in Arbeitsrichtung, nur eine Achse, Rückweg ist s
   sl.h = 8; const hs = sl.h;
   sl.update(0.1, { dx: 1, dy: 0.2, suction: false });
   assert.ok(sl.h <= hs && Math.abs(sl.h - (hs - 4 * 0.1)) < 1e-6); // nur Gravität, keine vertikale Eingabe
+});
+
+const flat = (g, m = 5) => { g.lake.mass.fill(m); g.lake.hard.fill(0); g.lake.debris.fill(0); return g.lake; };
+const sweep = (sim, seconds, dir = 1) => { for (let t = 0; t < seconds; t += 0.1) sim.update(0.1, { dx: dir, dy: 0, suction: true }); };
+
+test('Harte Schicht: gleiche Leistung entfernt weniger, mehrere Überfahrten nötig', () => {
+  const a = Lake.generate(createRng(1)), b = Lake.generate(createRng(1));
+  for (const l of [a, b]) { l.mass.fill(5); l.hard.fill(0); }
+  b.hard.fill(2);
+  const soft = a.suckProfile(5, 10, 5, 1.8, 2).removed, hard = b.suckProfile(5, 10, 5, 1.8, 2).removed;
+  assert.ok(hard < soft * 0.5);
+});
+
+test('Fremdstoff verstopft die Pumpe; Anheben des Kopfes vermeidet es', () => {
+  const g = new Game(8); const lake = flat(g);
+  const sim = g.startShift(); sim.y = 5; sim.anchor();
+  const sl = sim.slice, col = sl.x0 + 3;
+  lake.debris[lake.idx(col, sl.row)] = 1;
+  sl.x = sl.x0 + 2; sl.h = 9; // hoch über dem Fremdstoff
+  for (let i = 0; i < 20; i++) { sl.h = 9; sim.update(0.1, { dx: 1, dy: 0, suction: true }); }
+  assert.equal(sim.clogs, 0);
+  sl.x = sl.x0 + 2; sl.h = 5;
+  sweep(sim, 1);
+  assert.equal(sim.clogs, 1);
+  assert.ok(sl.clog > 0);
+  assert.equal(lake.debris[lake.idx(col, sl.row)], 0);
+});
+
+test('Automatik: Stufe 0 gibt es nicht, Stufe 2 fährt hin und her und saugt selbst', () => {
+  const g = new Game(9); flat(g);
+  g.levels.auto = 0;
+  let sim = g.startShift(); sim.anchor();
+  assert.equal(sim.toggleAuto(), false);
+  g.levels.auto = 2;
+  sim = g.startShift(); sim.anchor();
+  assert.equal(sim.toggleAuto(), true);
+  const x0 = sim.slice.x0;
+  for (let i = 0; i < 600; i++) sim.update(0.1, { dx: 0, dy: 0, suction: false });
+  assert.ok(sim.removed > 0);
+  assert.ok(sim.slice.x >= x0);
+});
+
+test('Automatik Stufe 1 macht Fehler, Reset behebt sie, manuelles Steuern übernimmt', () => {
+  const g = new Game(10); flat(g); g.levels.auto = 1;
+  const sim = g.startShift();
+  sim.rng = () => 0; sim.anchor(); sim.slice.rng = () => 0; // erzwingt Fehler
+  sim.toggleAuto();
+  sim.update(0.1, {});
+  assert.ok(sim.slice.auto.error);
+  assert.equal(sim.fixAuto(), true);
+  assert.equal(sim.slice.auto.error, null);
+  sim.update(0.1, { dx: 1, dy: 0 });
+  assert.equal(sim.slice.auto.on, false);
+});
+
+test('Automatik darf bei vollem Puffer nicht saugen', () => {
+  const g = new Game(11); flat(g); g.levels.auto = 3;
+  const sim = new DredgeSim(g.lake, g.stats, 100, 0);
+  sim.anchor(); sim.toggleAuto();
+  for (let i = 0; i < 50; i++) sim.update(0.1, {});
+  assert.equal(sim.removed, 0);
+});
+
+test('Drohne: saubere Zellen werden abgenommen, Restschmutz gemeldet', () => {
+  const g = new Game(12); const lake = g.lake;
+  lake.mass.fill(0); lake.initial.fill(1); lake.accepted.fill(0);
+  lake.mass[lake.idx(2, 1)] = 1; // Restschmutz
+  const d = new DroneSim(lake, g.stats);
+  d.x = 2; d.y = 1;
+  d.update(0.1, {});
+  assert.ok(d.newlyAccepted > 0);
+  assert.equal(d.newlyFlagged, 1);
+  assert.equal(lake.flagged[lake.idx(2, 1)], 1);
+  assert.ok(lake.acceptedFraction() > 0 && lake.acceptedFraction() < 1);
+});
+
+test('Sieg braucht Sauberkeit UND Abnahme', () => {
+  const g = new Game(13); g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a });
+  g.lake.mass.fill(0);
+  g.checkEnd();
+  assert.equal(g.status, 'playing'); // sauber, aber nicht abgenommen
+  g.lake.accepted.fill(1);
+  g.checkEnd();
+  assert.equal(g.status, 'won');
+});
+
+test('Trübungsschutz senkt die Trübung', () => {
+  const run = (lvl) => {
+    const g = new Game(14); flat(g); g.levels.curtain = lvl;
+    const sim = g.startShift(); sim.anchor(); sim.slice.h = 5; sweep(sim, 2);
+    return sim.turbidity;
+  };
+  assert.ok(run(4) < run(0));
 });

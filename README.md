@@ -12,13 +12,22 @@ Entsorgung aus den Tranchen bezahlen, Ausrüstung ausbauen.
 |---|---|
 | `src/config.js` | Balance: Kosten, Tranchen, Upgrades – hier drehen |
 | `src/sim/lake.js` | Seegrund-Raster, Absaugen (massenerhaltend), Altlasten-Zellen |
-| `src/sim/dredge.js` | Minispiel-Simulation (Bewegung, Saugen, Trübung, Bussen) |
+| `src/sim/dredge.js` | Schicht: Karte + Querschnitt, Uhr, Trübung, Bussen |
+| `src/sim/slice.js` | Querschnitt: Saugkopf, Arbeitsrichtung, Fremdstoffe, Automatik |
+| `src/sim/drone.js` | Tauchdrohne: Abnahme |
+| `src/sim/plant.js` | Anlage an Land, VVEA-Klassen |
 | `src/sim/game.js` | Management: Tage, Budget, Tranche, Abrechnung, Upgrades, Sieg/Niederlage |
 | `src/sim/events.js` | Zufallsereignisse (neue = neuer Eintrag) |
 | `src/ui/` | Canvas-Rendering, Eingabe |
 | `src/main.js` | Verdrahtung, DOM-Panel |
 
-Spielregeln (Stand): Anlage an Land mit Puffer, Durchsatz, Übertakten und VVEA-Klassen B/E/C (Analyse pro Charge); Saugkopf fährt auf einer Achse und saugt nur in Arbeitsrichtung.
+Spielregeln (Stand):
+- **Karte** zum Positionieren, **Querschnitt** zum Absaugen (gemeinsame Schichtuhr), **Drohne** zur Abnahme.
+- Saugkopf fährt auf einer Achse und saugt nur in Arbeitsrichtung; der Rückweg saugt nicht.
+- Harte Schichten (schraffiert) brauchen mehrere Überfahrten; Fremdstoffe verstopfen die Pumpe (Kopf anheben hilft).
+- Anlage an Land: Puffer, Durchsatz, Übertakten; jede Charge wird nach VVEA als Typ B/E/C eingestuft.
+- Automatik in drei Stufen (1 = experimentell, macht Fehler, Reset mit R), Trübungsschutz-Kasten ausbaubar.
+- Gewonnen ist der See, wenn die Schicht abgetragen UND von der Drohne abgenommen ist.
 
 Prinzip: `src/sim/` kennt weder DOM noch Canvas und ist getestet.
 
@@ -26,5 +35,4 @@ Prinzip: `src/sim/` kennt weder DOM noch Canvas und ist getestet.
 Karte: WASD/Pfeile (oder Maus gedrückt) fahren, E/Leertaste Anker werfen. Querschnitt: A/D/W/S Saugkopf, Leertaste/Klick saugen, Q zurück zur Karte.
 
 ## Ideen für später
-Querschnitts-Ansicht wie in der Vorlage (Ponton, Schlauch, Fossilienschicht), Schichten/Tiefe,
-Speichern (localStorage), Sound, Ereignisse mit Entscheidungen, Balancing, Touch-Steuerung.
+Balancing (alle Zahlen in `src/config.js`), Speichern (localStorage), Sound, Ereignisse mit Entscheidungen, Touch-Steuerung, Fossilienschicht als Bonus.

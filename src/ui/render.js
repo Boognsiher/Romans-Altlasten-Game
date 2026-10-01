@@ -21,6 +21,20 @@ export function drawMap(ctx, lake, sim) {
       const a = Math.min(1, 0.25 + m / 8);
       ctx.fillStyle = toxic[i] ? `rgba(200,70,60,${a})` : `rgba(120,95,60,${a})`;
       ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+      if (lake.hard[i]) { // Schraffur: hart = Kreuz, verdichtet = Strich
+        ctx.strokeStyle = 'rgba(20,10,0,.6)'; ctx.lineWidth = 1; ctx.beginPath();
+        ctx.moveTo(x * CELL, (y + 1) * CELL); ctx.lineTo((x + 1) * CELL, y * CELL);
+        if (lake.hard[i] > 1) { ctx.moveTo(x * CELL, y * CELL); ctx.lineTo((x + 1) * CELL, (y + 1) * CELL); }
+        ctx.stroke();
+      }
+      if (lake.debris[i]) { ctx.fillStyle = '#f2f2f2'; ctx.fillRect(x * CELL + 7, y * CELL + 7, 6, 6); }
+    }
+  }
+  for (let y = 0; y < rows; y++) { // Abnahme durch die Drohne
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      if (lake.accepted[i] && lake.initial[i]) { ctx.fillStyle = 'rgba(90,230,130,.35)'; ctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
+      if (lake.flagged[i]) { ctx.strokeStyle = '#ff5d4d'; ctx.lineWidth = 2; ctx.strokeRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4); }
     }
   }
   if (!sim) return;
@@ -37,6 +51,16 @@ export function drawMap(ctx, lake, sim) {
   ctx.fillStyle = '#d9dee3'; ctx.fillRect(px - 14, py - 9, 28, 18);
   ctx.fillStyle = '#222'; for (let i = 0; i < 3; i++) ctx.fillRect(px - 12 + i * 9, py + 6, 6, 4);
   turbidityVeil(ctx, sim, cols * CELL, rows * CELL);
+}
+
+// ---------- Instanz 3: Drohne (Draufsicht, Scanradius) ----------
+export function drawDrone(ctx, drone) {
+  const px = drone.x * CELL, py = drone.y * CELL;
+  ctx.fillStyle = 'rgba(127,227,255,.15)'; ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(px, py, drone.stats.droneRadius * CELL, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ffd24d'; ctx.fillRect(px - 8, py - 5, 16, 10);
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.strokeRect(px - 8, py - 5, 16, 10);
+  ctx.fillStyle = '#222'; ctx.fillRect(px - 12, py - 8, 5, 3); ctx.fillRect(px + 7, py - 8, 5, 3);
 }
 
 // ---------- Instanz 2: Querschnitt ----------
@@ -66,6 +90,19 @@ export function drawSlice(ctx, lake, sim) {
   ctx.lineTo(W, yOf(m(SLICE.cols - 1))); ctx.lineTo(W, yOf(0)); ctx.closePath();
   ctx.fillStyle = '#7a5f3c'; ctx.fill();
   ctx.strokeStyle = '#a58760'; ctx.lineWidth = 3; ctx.stroke();
+  // Harte Schichten (dunkel) und Fremdstoffe (Rad) auf dem Profil
+  for (let c = 0; c < SLICE.cols; c++) {
+    const i = lake.idx(sl.x0 + c, sl.row), mm = lake.mass[i];
+    if (lake.hard[i] && mm > 0) {
+      ctx.fillStyle = lake.hard[i] > 1 ? 'rgba(25,18,10,.6)' : 'rgba(25,18,10,.32)';
+      ctx.fillRect(c * U, yOf(mm), U, mm * U);
+    }
+    if (lake.debris[i]) {
+      const cx = (c + 0.5) * U, cy = yOf(mm) - 10;
+      ctx.strokeStyle = '#e6ebef'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.moveTo(cx - 9, cy); ctx.lineTo(cx + 9, cy); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx, cy + 9); ctx.stroke();
+    }
+  }
   // Altlasten-Fässer in giftigen Zellen
   for (let c = 0; c < SLICE.cols; c++) {
     const i = lake.idx(sl.x0 + c, sl.row);
@@ -82,6 +119,14 @@ export function drawSlice(ctx, lake, sim) {
   ctx.fillStyle = '#d9dee3'; ctx.fillRect(pxm - 70, 26, 140, 30);
   ctx.fillStyle = '#222'; for (let i = 0; i < 5; i++) ctx.beginPath(), ctx.arc(pxm - 56 + i * 28, 42, 7, 0, Math.PI * 2), ctx.fill();
   ctx.fillStyle = '#9aa6b0'; ctx.fillRect(pxm - 20, 8, 40, 20);
+  // Trübungsschutz: Kasten um den Saugkopf, wächst mit der Ausbaustufe
+  const lvl = Math.round(sim.stats.curtain / 0.2);
+  if (lvl > 0) {
+    const bw = U * (0.7 + 0.3 * lvl), top = head.y - 70;
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(head.x - bw, top, bw * 2, head.y + 10 - top);
+    ctx.strokeStyle = '#c9d2d8'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(head.x - bw, top); ctx.lineTo(head.x - bw, head.y + 10); ctx.moveTo(head.x + bw, top); ctx.lineTo(head.x + bw, head.y + 10); ctx.moveTo(head.x - bw, top); ctx.lineTo(head.x + bw, top); ctx.stroke();
+  }
   // Saugkopf, Radius, Sog
   ctx.strokeStyle = sl.suctioning ? '#7fe3ff' : '#ffffff44'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
   ctx.beginPath(); ctx.arc(head.x, head.y, sim.stats.radius * U, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
@@ -91,6 +136,14 @@ export function drawSlice(ctx, lake, sim) {
   }
   ctx.fillStyle = '#2b2f33'; ctx.fillRect(head.x - 14, head.y - 14, 28, 14);
   ctx.fillStyle = '#555c63'; ctx.fillRect(head.x - 18, head.y - 4, 36, 6);
+  if (sl.clog > 0) {
+    ctx.fillStyle = '#ff7a6b'; ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.fillText(`VERSTOPFT ${sl.clog.toFixed(1)}s`, Math.max(8, head.x - 60), Math.max(90, head.y - 82));
+  }
+  if (sl.auto.on) {
+    ctx.fillStyle = sl.auto.error ? '#ff7a6b' : '#7bd88f'; ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.fillText(sl.auto.error ? 'AUTOMATIK STÖRUNG (R)' : 'AUTOMATIK', W - 230, SLICE_TOP - 8);
+  }
   // Arbeitsrichtung: nur nach rechts (und nach unten) wird gesaugt
   ctx.fillStyle = sl.suctioning ? '#7fe3ff' : '#ffffff66';
   ctx.beginPath(); ctx.moveTo(head.x + 24, head.y - 14); ctx.lineTo(head.x + 40, head.y - 7); ctx.lineTo(head.x + 24, head.y); ctx.fill();
