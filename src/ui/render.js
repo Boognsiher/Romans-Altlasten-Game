@@ -91,6 +91,11 @@ export function drawSlice(ctx, lake, sim) {
   }
   ctx.fillStyle = '#2b2f33'; ctx.fillRect(head.x - 14, head.y - 14, 28, 14);
   ctx.fillStyle = '#555c63'; ctx.fillRect(head.x - 18, head.y - 4, 36, 6);
+  // Arbeitsrichtung: nur nach rechts (und nach unten) wird gesaugt
+  ctx.fillStyle = sl.suctioning ? '#7fe3ff' : '#ffffff66';
+  ctx.beginPath(); ctx.moveTo(head.x + 24, head.y - 14); ctx.lineTo(head.x + 40, head.y - 7); ctx.lineTo(head.x + 24, head.y); ctx.fill();
+  ctx.fillStyle = '#ffffff55'; ctx.font = '14px system-ui, sans-serif';
+  ctx.fillText('Arbeitsrichtung ▶  (Rückweg saugt nicht)', 12, SLICE_TOP - 8);
   turbidityVeil(ctx, sim, W, H);
 }
 

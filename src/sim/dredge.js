@@ -6,9 +6,10 @@ import { SliceSim } from './slice.js';
 //  - mode 'slice': Querschnitt an der Ankerposition, hier wird abgesaugt
 // Reine Simulation ohne Rendering/DOM (deshalb testbar).
 export class DredgeSim {
-  constructor(lake, stats, shiftSeconds = CONFIG.shiftSeconds) {
+  constructor(lake, stats, shiftSeconds = CONFIG.shiftSeconds, bufferRoom = Infinity) {
     this.lake = lake;
     this.stats = stats;
+    this.bufferRoom = bufferRoom; // so viel m³ passen noch in den Puffer vor der Anlage
     this.timeLeft = shiftSeconds;
     this.mode = 'map';
     this.slice = null;
@@ -22,6 +23,7 @@ export class DredgeSim {
   }
 
   get row() { return clamp(Math.floor(this.y), 0, this.lake.rows - 1); }
+  get bufferFull() { return this.removed >= this.bufferRoom; }
   get suctioning() { return this.mode === 'slice' && this.slice.suctioning; }
 
   // Anker werfen: Querschnitt an der aktuellen Position öffnen
@@ -52,7 +54,7 @@ export class DredgeSim {
       this.x = clamp(this.x + dx * s.speed * dt, 0, this.lake.cols);
       this.y = clamp(this.y + dy * s.speed * dt, 0, this.lake.rows);
     } else {
-      const r = this.slice.update(dt, input);
+      const r = this.slice.update(dt, { ...input, suction: input.suction && !this.bufferFull });
       this.removed += r.removed;
       this.toxicRemoved += r.toxicRemoved;
       if (this.slice.suctioning) {

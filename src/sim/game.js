@@ -4,6 +4,7 @@ import { DredgeSim } from './dredge.js';
 import { EVENTS } from './events.js';
 import { computeStats, upgradeCost } from './stats.js';
 import { createRng } from './rng.js';
+import { runPlantDay } from './plant.js';
 
 // Gesamtzustand des Spiels (Management-Ebene). Kein DOM, kein Canvas.
 export class Game {
@@ -15,12 +16,16 @@ export class Game {
     this.money = CONFIG.startMoney;
     this.score = 0;
     this.levels = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
-    this.totals = { removed: 0, disposalPaid: 0, finesPaid: 0, eventCosts: 0 };
+    this.stock = { normal: 0, toxic: 0 }; // Rohschlamm im Puffer vor der Anlage (m³)
+    this.overclock = false; // Anlage übertakten: mehr Durchsatz, höheres Risiko teurer Klassen
+    this.totals = { removed: 0, disposalPaid: 0, finesPaid: 0, eventCosts: 0, classes: { B: 0, E: 0, C: 0 } };
     this.status = 'playing'; // 'playing' | 'won' | 'lost'
     this.log = [];
   }
 
   get stats() { return computeStats(this.levels); }
+  get stockTotal() { return this.stock.normal + this.stock.toxic; }
+  get bufferRoom() { return Math.max(0, this.stats.bufferCapacity - this.stockTotal); }
 
   say(text, kind = 'info') { this.log.unshift({ day: this.day, text, kind }); this.log.length = Math.min(this.log.length, 50); }
 
@@ -38,33 +43,43 @@ export class Game {
   }
 
   startShift() {
-    return new DredgeSim(this.lake, this.stats);
+    return new DredgeSim(this.lake, this.stats, CONFIG.shiftSeconds, this.bufferRoom);
   }
 
-  // Rechnet eine beendete Schicht ab und schaltet einen Tag weiter.
+  // Rechnet eine beendete Schicht ab (Material geht in den Puffer) und schaltet einen Tag weiter.
   finishShift(sim) {
     const r = sim.result();
     const toxic = r.toxicRemoved, normal = r.removed - r.toxicRemoved;
-    const disposal = Math.round(
-      (normal * CONFIG.disposalCostPerUnit + toxic * CONFIG.disposalCostPerUnit * CONFIG.toxicCostMultiplier) / 10,
-    ) * 10;
-    const points = Math.round(
-      (normal + toxic * CONFIG.toxicPointsMultiplier) * CONFIG.pointsPerUnit,
-    );
-    this.money -= disposal + r.fines;
+    const points = Math.round((normal + toxic * CONFIG.toxicPointsMultiplier) * CONFIG.pointsPerUnit);
+    this.stock.normal += normal;
+    this.stock.toxic += toxic;
+    this.money -= r.fines;
     this.score += points;
     this.totals.removed += r.removed;
-    this.totals.disposalPaid += disposal;
     this.totals.finesPaid += r.fines;
-    this.say(`Schicht: ${r.removed.toFixed(1)} m³ abgesaugt, +${points} Punkte, Entsorgung −${disposal} CHF`);
+    this.say(`Schicht: ${r.removed.toFixed(1)} m³ abgesaugt, +${points} Punkte`);
     if (r.fines) this.say(`Trübungs-Busse −${r.fines} CHF`, 'bad');
     this.advanceDays(1);
-    return { ...r, disposal, points };
+    return { ...r, points };
+  }
+
+  // Anlage verarbeitet täglich bis zur Kapazität; jede Charge wird analysiert und entsorgt.
+  runPlant() {
+    const res = runPlantDay(this.stock, this.stats, this.overclock, this.rng);
+    if (!res.processed) return;
+    this.stock = res.stock;
+    this.money -= res.cost;
+    this.totals.disposalPaid += res.cost;
+    const n = { B: 0, E: 0, C: 0 };
+    for (const b of res.batches) { n[b.cls]++; this.totals.classes[b.cls]++; }
+    const parts = Object.entries(n).filter(([, c]) => c).map(([k, c]) => `${c}× ${CONFIG.plant.classes[k].name}`);
+    this.say(`Anlage presst ${res.processed.toFixed(0)} m³ trocken (${parts.join(', ')}). Labor und Deponie wollen −${res.cost} CHF${n.C ? ' – Typ C, das Labor lächelt nicht' : ''}`, n.C ? 'bad' : 'info');
   }
 
   advanceDays(n) {
     for (let i = 0; i < n && this.status === 'playing'; i++) {
       this.day++;
+      this.runPlant();
       if ((this.day - 1) % CONFIG.trancheEveryDays === 0) {
         this.money += CONFIG.trancheAmount;
         this.say(`Tranche erhalten: +${CONFIG.trancheAmount} CHF`, 'good');

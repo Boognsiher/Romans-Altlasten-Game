@@ -1,5 +1,6 @@
 import { CONFIG, UPGRADES } from './config.js';
 import { Game } from './sim/game.js';
+import { classProbabilities } from './sim/plant.js';
 import { createInput } from './ui/input.js';
 import { CELL, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen } from './ui/render.js';
 
@@ -20,23 +21,44 @@ function renderPanel() {
   $('h-score').textContent = game.score.toLocaleString('de-CH');
   $('h-clean').textContent = `${(game.lake.cleanFraction() * 100).toFixed(1)}%`;
 
-  $('upgrades').replaceChildren(...Object.entries(UPGRADES).map(([id, def]) => {
-    const cost = game.nextUpgradeCost(id);
-    const row = document.createElement('div'); row.className = 'up';
-    row.innerHTML = `<div>${def.name} <small>Stufe ${game.levels[id]}/${def.maxLevel} · ${def.desc}</small></div>`;
-    const btn = document.createElement('button');
-    btn.textContent = cost === null ? 'Max' : chf(cost);
-    btn.disabled = cost === null || game.money < cost || sim !== null || game.status !== 'playing';
-    btn.onclick = () => { game.buyUpgrade(id); renderPanel(); };
-    row.append(btn);
-    return row;
-  }));
+  renderPlant();
+  const groups = { plant: 'Anlage ausbauen', ponton: 'Ponton ausrüsten' };
+  const nodes = [];
+  for (const [g, title] of Object.entries(groups)) {
+    const h = document.createElement('h3'); h.textContent = title; nodes.push(h);
+    for (const [id, def] of Object.entries(UPGRADES).filter(([, d]) => d.group === g)) {
+      const cost = game.nextUpgradeCost(id);
+      const row = document.createElement('div'); row.className = 'up';
+      row.innerHTML = `<div>${def.name} <small>Stufe ${game.levels[id]}/${def.maxLevel} · ${def.desc}</small></div>`;
+      const btn = document.createElement('button');
+      btn.textContent = cost === null ? 'Max' : chf(cost);
+      btn.disabled = cost === null || game.money < cost || sim !== null || game.status !== 'playing';
+      btn.onclick = () => { game.buyUpgrade(id); renderPanel(); };
+      row.append(btn);
+      nodes.push(row);
+    }
+  }
+  $('upgrades').replaceChildren(...nodes);
   $('log').replaceChildren(...game.log.map((e) => {
     const li = document.createElement('li'); li.className = e.kind;
     li.textContent = `Tag ${e.day}: ${e.text}`; return li;
   }));
   const busy = sim !== null || game.status !== 'playing';
   $('btn-start').disabled = busy; $('btn-wait').disabled = busy;
+}
+
+function renderPlant() {
+  const st = game.stats, P = CONFIG.plant, cap = st.plantCapacity * (game.overclock ? P.overclockFactor : 1);
+  const probs = classProbabilities(game.stockTotal ? game.stock.toxic / game.stockTotal : 0, game.overclock);
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  $('plant').innerHTML = `
+    <div>Puffer: <b>${game.stockTotal.toFixed(0)}</b> / ${st.bufferCapacity} m³</div>
+    <progress max="${st.bufferCapacity}" value="${game.stockTotal}"></progress>
+    <div>Durchsatz: ${cap.toFixed(0)} m³/Tag · Restvolumen nach Pressen: ${pct(st.dewater)}</div>
+    <div>Chargen-Lotto: B ${pct(probs.B)} · E ${pct(probs.E)} · <span class="${probs.C > 0.2 ? 'warn' : ''}">C ${pct(probs.C)}</span></div>
+    <div>Bisher: ${Object.entries(game.totals.classes).map(([k, n]) => `${n}× ${k}`).join(', ')}</div>
+    <label><input type="checkbox" id="chk-oc" ${game.overclock ? 'checked' : ''}> Übertakten (+${Math.round((P.overclockFactor - 1) * 100)}% Durchsatz, Anlage schwitzt)</label>`;
+  $('chk-oc').onchange = (e) => { game.overclock = e.target.checked; renderPlant(); };
 }
 
 function showOverlay(html) { const o = $('overlay'); o.innerHTML = `<div>${html}</div>`; o.classList.add('show'); }
@@ -74,7 +96,7 @@ function endShift() {
   } else {
     showOverlay(`<h2>Schicht beendet</h2>
       <p>${r.removed.toFixed(1)} m³ abgesaugt (davon ${r.toxicRemoved.toFixed(1)} m³ Altlasten)<br>
-      +${r.points} Punkte · Entsorgung −${chf(r.disposal)}${r.fines ? `<br>Busse −${chf(r.fines)}` : ''}</p>
+      +${r.points} Punkte · Der Schlamm wartet im Puffer auf die Anlage${r.fines ? `<br>Busse −${chf(r.fines)}` : ''}</p>
       <button class="primary" id="btn-ok">Weiter</button>`);
     $('btn-ok').onclick = hideOverlay;
   }
@@ -100,7 +122,7 @@ function frame(now) {
     } else if (readInput.tap('Escape', 'KeyQ')) leave();
     sim.update(dt, inp);
     $('s-time').textContent = `${Math.ceil(sim.timeLeft)}s`;
-    $('s-removed').textContent = `${sim.removed.toFixed(1)} m³`;
+    $('s-removed').textContent = `${sim.removed.toFixed(1)} m³${sim.bufferFull ? ' – Puffer voll, Pumpe pausiert!' : ''}`;
     $('s-turb').value = sim.turbidity;
     if (sim.over) endShift();
   }
@@ -110,7 +132,7 @@ function frame(now) {
 }
 renderPanel();
 showOverlay(`<h2>Seesanierung Uetikon</h2>
-  <p>Fahre auf der <b>Karte</b> mit dem Ponton (WASD / Pfeile, Maus gedrückt) an eine Stelle und wirf den Anker (<b>E</b> / Leertaste). Im <b>Querschnitt</b> steuerst du den Saugkopf (A/D links-rechts, W/S hoch-runter) und saugst mit <b>Leertaste</b> / Mausklick. <b>Q</b> bringt dich zurück zur Karte. Fahren und Absaugen teilen sich die Schichtzeit.
+  <p>Fahre auf der <b>Karte</b> mit dem Ponton (WASD / Pfeile, Maus gedrückt) an eine Stelle und wirf den Anker (<b>E</b> / Leertaste). Im <b>Querschnitt</b> fährt der Saugkopf wie ein Schlitten auf einer Achse (A/D bzw. W/S) und saugt mit gehaltener <b>Leertaste</b> / Mausklick nur in Arbeitsrichtung (nach rechts). Der Rückweg saugt nicht, ist dafür schneller. <b>Q</b> bringt dich zurück zur Karte. Fahren und Absaugen teilen sich die Schichtzeit.
   Rot = Altlasten (mehr Punkte, teurere Entsorgung). Zu viel Trübung gibt Bussen.
   Alle ${CONFIG.trancheEveryDays} Tage kommt eine Tranche – davon bezahlst du die Entsorgung.</p>
   <button class="primary" id="btn-go">Los</button>`);

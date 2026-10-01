@@ -18,6 +18,8 @@ Entsorgung aus den Tranchen bezahlen, Ausrüstung ausbauen.
 | `src/ui/` | Canvas-Rendering, Eingabe |
 | `src/main.js` | Verdrahtung, DOM-Panel |
 
+Spielregeln (Stand): Anlage an Land mit Puffer, Durchsatz, Übertakten und VVEA-Klassen B/E/C (Analyse pro Charge); Saugkopf fährt auf einer Achse und saugt nur in Arbeitsrichtung.
+
 Prinzip: `src/sim/` kennt weder DOM noch Canvas und ist getestet.
 
 ## Steuerung

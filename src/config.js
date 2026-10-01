@@ -8,8 +8,18 @@ export const CONFIG = {
   deadlineDays: 150,
   bankruptcyLimit: -30000, // darunter: Projekt gestoppt
   winCleanFraction: 0.95,
-  disposalCostPerUnit: 60, // CHF pro m³ Schlamm
-  toxicCostMultiplier: 2.5,
+  // Anlage an Land: entwässert den Schlamm, danach wird jede Charge analysiert und nach VVEA eingestuft
+  plant: {
+    batchSize: 25, // m³ pro Charge (= eine Probe)
+    labFeePerBatch: 400, // CHF Analyse pro Charge
+    overclockFactor: 1.5, // Durchsatz beim Übertakten
+    overclockRisk: 0.2, // Zuschlag auf das Risiko teurer Klassen
+    toxicRisk: 0.8, // Einfluss des Altlasten-Anteils auf das Risiko
+    // Preis in CHF pro m³ entwässertes Material
+    classes: { B: { name: 'Typ B', price: 90 }, E: { name: 'Typ E', price: 220 }, C: { name: 'Typ C', price: 500 } },
+    baseProb: { B: 0.65, E: 0.28, C: 0.07 },
+    riskShift: { E: 0.3, C: 0.35 }, // bei Risiko 1: so viel Wahrscheinlichkeit wandert von B zu E bzw. C
+  },
   pointsPerUnit: 10,
   toxicPointsMultiplier: 3,
   turbidityFineThreshold: 0.7,
@@ -22,33 +32,54 @@ export const BASE_STATS = {
   radius: 1.8, // Zellen
   speed: 4.0, // Zellen/s
   curtain: 0, // Schlammschürze: reduziert Trübung (0..1)
-  suctionSpeedFactor: 0.55, // Ponton ist beim Saugen langsamer
+  suctionSpeedFactor: 0.55, // (derzeit ungenutzt, Fahren und Saugen sind getrennte Instanzen)
+  plantCapacity: 50, // m³/Tag, die die Anlage verarbeitet
+  bufferCapacity: 150, // m³ Puffer vor der Anlage; ist er voll, muss das Saugen pausieren
+  dewater: 0.6, // Volumenanteil nach der Entwässerung (kleiner = weniger Entsorgung)
 };
 
 // Jedes Upgrade: Stufe n kostet baseCost * growth^n, wirkt über apply()
 export const UPGRADES = {
   power: {
+    group: 'ponton',
     name: 'Saugpumpe',
     desc: 'Mehr m³ pro Sekunde',
     maxLevel: 8, baseCost: 8000, growth: 1.5,
     apply: (s, lvl) => { s.power += lvl * 0.8; },
   },
   radius: {
+    group: 'ponton',
     name: 'Saugkopf',
     desc: 'Grössere Saugfläche',
     maxLevel: 5, baseCost: 6000, growth: 1.6,
     apply: (s, lvl) => { s.radius += lvl * 0.5; },
   },
   speed: {
+    group: 'ponton',
     name: 'Ponton-Antrieb',
     desc: 'Schnelleres Fahren',
     maxLevel: 5, baseCost: 5000, growth: 1.5,
     apply: (s, lvl) => { s.speed += lvl * 0.6; },
   },
   curtain: {
+    group: 'ponton',
     name: 'Schlammschürze',
     desc: 'Weniger Trübung, weniger Bussen',
     maxLevel: 4, baseCost: 7000, growth: 1.6,
     apply: (s, lvl) => { s.curtain = Math.min(0.8, lvl * 0.2); },
+  },
+  plant: {
+    group: 'plant',
+    name: 'Entwässerungsanlage',
+    desc: 'Mehr Durchsatz und Puffer',
+    maxLevel: 6, baseCost: 10000, growth: 1.5,
+    apply: (s, lvl) => { s.plantCapacity += lvl * 25; s.bufferCapacity += lvl * 50; },
+  },
+  dewater: {
+    group: 'plant',
+    name: 'Filterpresse',
+    desc: 'Trockeneres Material, weniger Entsorgungsvolumen',
+    maxLevel: 4, baseCost: 9000, growth: 1.6,
+    apply: (s, lvl) => { s.dewater = Math.max(0.3, s.dewater - lvl * 0.07); },
   },
 };

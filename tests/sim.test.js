@@ -6,6 +6,7 @@ import { Game } from '../src/sim/game.js';
 import { DredgeSim } from '../src/sim/dredge.js';
 import { CONFIG } from '../src/config.js';
 import { computeStats } from '../src/sim/stats.js';
+import { classProbabilities, runPlantDay } from '../src/sim/plant.js';
 
 test('rng ist deterministisch', () => {
   assert.equal(createRng(5)(), createRng(5)());
@@ -28,7 +29,6 @@ test('Schicht: Saugen entfernt Material, Zeit läuft ab', () => {
   const g = new Game(3);
   const sim = g.startShift();
   sim.x = 24; sim.y = 15; sim.anchor();
-  sim.slice.x = 24;
   while (!sim.over) sim.update(0.1, { dx: Math.sin(sim.timeLeft), dy: 0, suction: true });
   assert.ok(sim.removed > 0);
 });
@@ -39,7 +39,9 @@ test('Karte saugt nicht, Querschnitt schon', () => {
   sim.update(1, { dx: 0, dy: 0, suction: true });
   assert.equal(sim.removed, 0);
   g.lake.mass.fill(5); sim.anchor(); sim.slice.h = 5;
-  sim.update(1, { dx: 0, dy: 0, suction: true });
+  sim.update(0.5, { dx: 0, dy: 0, suction: true });
+  assert.equal(sim.removed, 0); // Stillstand saugt nicht
+  sim.update(0.5, { dx: 1, dy: 0, suction: true });
   assert.ok(sim.removed > 0);
 });
 
@@ -73,14 +75,44 @@ test('Querschnitt: Saugkopf in der Höhe saugt nichts', () => {
   assert.ok(Math.abs(r.removed - 3) < 1e-6);
 });
 
-test('Abrechnung: Entsorgung kostet, Tag wird weitergeschaltet', () => {
+test('Schicht: Material geht in den Puffer, Tag wird weitergeschaltet', () => {
   const g = new Game(4);
+  g.rng = Object.assign(() => 0.5, { chance: () => false, range: (a) => a });
   const sim = new DredgeSim(g.lake, computeStats(), 1);
-  sim.removed = 10; sim.toxicRemoved = 0;
-  const m = g.money;
+  sim.removed = 10; sim.toxicRemoved = 4;
   g.finishShift(sim);
   assert.equal(g.day, 2);
-  assert.equal(g.money, m - 10 * CONFIG.disposalCostPerUnit);
+  // Anlage hat am neuen Tag bereits verarbeitet (Kapazität 50 > 10) -> Puffer leer, Entsorgung bezahlt
+  assert.ok(g.stockTotal < 1e-9);
+  assert.ok(g.money < CONFIG.startMoney);
+  assert.equal(g.totals.classes.B + g.totals.classes.E + g.totals.classes.C, 1);
+});
+
+test('Puffer voll: Pumpe pausiert', () => {
+  const g = new Game(4);
+  g.lake.mass.fill(5);
+  const sim = new DredgeSim(g.lake, computeStats(), 100, 3);
+  sim.anchor(); sim.slice.h = 5;
+  for (let i = 0; i < 100; i++) sim.update(0.1, { dx: (i % 40) < 20 ? 1 : -1, dy: 0, suction: true });
+  assert.ok(sim.bufferFull);
+  assert.ok(sim.removed < 3 + computeStats().power * 0.1 + 1e-6);
+});
+
+test('Klassenwahrscheinlichkeiten: Summe 1, Altlasten und Übertakten erhöhen C', () => {
+  const a = classProbabilities(0, false), b = classProbabilities(0.5, false), c = classProbabilities(0, true);
+  for (const p of [a, b, c]) assert.ok(Math.abs(p.B + p.E + p.C - 1) < 1e-9);
+  assert.ok(b.C > a.C && c.C > a.C);
+});
+
+test('Anlage: Kapazität begrenzt, Rest bleibt im Lager, Masse stimmt', () => {
+  const stats = computeStats();
+  const rng = createRng(1);
+  const res = runPlantDay({ normal: 90, toxic: 10 }, stats, false, rng);
+  assert.equal(res.processed, stats.plantCapacity);
+  assert.ok(Math.abs(res.stock.normal + res.stock.toxic - 50) < 1e-6);
+  assert.equal(res.batches.length, 2);
+  const oc = runPlantDay({ normal: 90, toxic: 10 }, stats, true, createRng(1));
+  assert.equal(oc.processed, stats.plantCapacity * CONFIG.plant.overclockFactor);
 });
 
 test('Tranche alle N Tage', () => {
@@ -105,4 +137,22 @@ test('Bankrott beendet das Spiel', () => {
   g.money = CONFIG.bankruptcyLimit - 1;
   g.advanceDays(1);
   assert.equal(g.status, 'lost');
+});
+
+test('Querschnitt: Saugen nur in Arbeitsrichtung, nur eine Achse, Rückweg ist schneller', () => {
+  const g = new Game(3);
+  g.lake.mass.fill(5);
+  const sim = g.startShift(); sim.anchor();
+  const sl = sim.slice; sl.h = 5;
+  sl.x = sl.x0 + 8; sl.h = 5;
+  const x1 = sl.x, rBack = sl.update(0.2, { dx: -1, dy: 0, suction: true });
+  assert.equal(rBack.removed, 0); // rückwärts: kein Saugen
+  const backDist = x1 - sl.x;
+  const x2 = sl.x, rFwd = sl.update(0.2, { dx: 1, dy: 0, suction: true });
+  assert.ok(rFwd.removed > 0);
+  assert.ok(backDist > sl.x - x2); // Rückweg schneller als Arbeitsfahrt
+  // Diagonale Eingabe: nur die stärkere Achse zählt
+  sl.h = 8; const hs = sl.h;
+  sl.update(0.1, { dx: 1, dy: 0.2, suction: false });
+  assert.ok(sl.h <= hs && Math.abs(sl.h - (hs - 4 * 0.1)) < 1e-6); // nur Gravität, keine vertikale Eingabe
 });
