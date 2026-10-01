@@ -27,8 +27,50 @@ test('Seegrund lässt sich komplett leersaugen', () => {
 test('Schicht: Saugen entfernt Material, Zeit läuft ab', () => {
   const g = new Game(3);
   const sim = g.startShift();
-  while (!sim.over) sim.update(0.1, { dx: 0.3, dy: 0.1, suction: true });
+  sim.x = 24; sim.y = 15; sim.anchor();
+  sim.slice.x = 24;
+  while (!sim.over) sim.update(0.1, { dx: Math.sin(sim.timeLeft), dy: 0, suction: true });
   assert.ok(sim.removed > 0);
+});
+
+test('Karte saugt nicht, Querschnitt schon', () => {
+  const g = new Game(3);
+  const sim = g.startShift();
+  sim.update(1, { dx: 0, dy: 0, suction: true });
+  assert.equal(sim.removed, 0);
+  g.lake.mass.fill(5); sim.anchor(); sim.slice.h = 5;
+  sim.update(1, { dx: 0, dy: 0, suction: true });
+  assert.ok(sim.removed > 0);
+});
+
+test('Anker nur in der Karte, Lichten nur im Querschnitt, Uhr läuft in beiden', () => {
+  const sim = new Game(3).startShift();
+  assert.equal(sim.leave(), false);
+  assert.equal(sim.anchor(), true);
+  assert.equal(sim.anchor(), false);
+  const t = sim.timeLeft; sim.update(1, {});
+  assert.equal(sim.timeLeft, t - 1);
+  assert.equal(sim.leave(), true);
+  assert.equal(sim.mode, 'map');
+});
+
+test('Querschnitt: Saugkopf dringt nicht in den Grund, Fenster liegt im See', () => {
+  const g = new Game(3);
+  g.lake.mass.fill(4);
+  const sim = g.startShift(); sim.x = 0; sim.anchor();
+  assert.equal(sim.slice.x0, 0);
+  for (let i = 0; i < 100; i++) sim.update(0.1, { dx: 0, dy: 1, suction: false });
+  assert.ok(sim.slice.h >= 4 - 1e-9);
+  sim.x = g.lake.cols; sim.leave(); sim.anchor();
+  assert.equal(sim.slice.x0, g.lake.cols - 16);
+});
+
+test('Querschnitt: Saugkopf in der Höhe saugt nichts', () => {
+  const lake = Lake.generate(createRng(1));
+  lake.mass.fill(2);
+  assert.equal(lake.suckProfile(5, 10, 12, 1.8, 100).removed, 0);
+  const r = lake.suckProfile(5, 10, 2, 1.8, 3);
+  assert.ok(Math.abs(r.removed - 3) < 1e-6);
 });
 
 test('Abrechnung: Entsorgung kostet, Tag wird weitergeschaltet', () => {

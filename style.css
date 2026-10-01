@@ -7,7 +7,7 @@ h1 { font-size:18px; margin:0; } h2 { font-size:14px; text-transform:uppercase; 
 main { display:grid; grid-template-columns: minmax(0,1fr) 300px; gap:16px; padding:16px; }
 @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
 #stage { position:relative; background:#0a1219; border-radius:8px; overflow:hidden; }
-canvas { display:block; width:100%; height:auto; touch-action:none; }
+canvas { display:block; width:auto; max-width:100%; max-height:calc(100vh - 130px); margin:0 auto; touch-action:none; }
 #shift-hud { position:absolute; top:8px; left:8px; background:#000a; padding:4px 10px; border-radius:6px; }
 #overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; background:#000b; padding:24px; }
 #overlay.show { display:flex; } #overlay div { max-width:380px; }
@@ -18,3 +18,5 @@ button.primary { background:var(--accent); color:#04222b; font-weight:600; width
 .up { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; } .up small { color:var(--muted); display:block; }
 #log { list-style:none; margin:0; padding:0; max-height:240px; overflow:auto; font-size:13px; } #log li { padding:2px 0; color:var(--muted); }
 #log .good { color:var(--good); } #log .bad { color:var(--bad); }
+#shift-actions { position:absolute; bottom:8px; left:8px; display:flex; gap:8px; } #shift-actions button { width:auto; margin:0; }
+#shift-actions[hidden], #shift-hud[hidden] { display:none; }

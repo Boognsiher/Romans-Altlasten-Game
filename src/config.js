@@ -1,7 +1,7 @@
 // Zentrale Spielbalance. Alle Zahlen hier ändern, nichts in der Logik verstecken.
 export const CONFIG = {
   lake: { cols: 48, rows: 30, blobs: 22, toxicBlobs: 7 },
-  shiftSeconds: 60, // eine Schicht = ein Arbeitstag
+  shiftSeconds: 120, // eine Schicht = ein Arbeitstag (Fahren + Absaugen teilen sich die Zeit)
   startMoney: 40000, // CHF
   trancheEveryDays: 7,
   trancheAmount: 25000, // CHF

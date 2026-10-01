@@ -21,7 +21,7 @@ Entsorgung aus den Tranchen bezahlen, Ausrüstung ausbauen.
 Prinzip: `src/sim/` kennt weder DOM noch Canvas und ist getestet.
 
 ## Steuerung
-WASD/Pfeile oder Maus = fahren, Leertaste/Klick halten = saugen.
+Karte: WASD/Pfeile (oder Maus gedrückt) fahren, E/Leertaste Anker werfen. Querschnitt: A/D/W/S Saugkopf, Leertaste/Klick saugen, Q zurück zur Karte.
 
 ## Ideen für später
 Querschnitts-Ansicht wie in der Vorlage (Ponton, Schlauch, Fossilienschicht), Schichten/Tiefe,

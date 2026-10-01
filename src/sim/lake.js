@@ -46,33 +46,53 @@ export class Lake {
     return this.initialTotal > 0 ? 1 - this.remaining() / this.initialTotal : 1;
   }
 
-  // Saugt um (cx, cy) mit Radius; verteilt `amount` (m³) gewichtet auf die Zellen.
-  // Gibt { removed, toxicRemoved } in m³ zurück. Masse wird nie erzeugt oder vernichtet.
-  suck(cx, cy, radius, amount) {
-    const cells = [];
-    let wSum = 0;
-    const x0 = Math.max(0, Math.floor(cx - radius)), x1 = Math.min(this.cols - 1, Math.ceil(cx + radius));
-    const y0 = Math.max(0, Math.floor(cy - radius)), y1 = Math.min(this.rows - 1, Math.ceil(cy + radius));
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / radius;
-        if (d >= 1) continue;
-        const i = this.idx(x, y);
-        if (this.mass[i] <= 0) continue;
-        const w = 1 - d * d;
-        cells.push([i, w]);
-        wSum += w;
-      }
-    }
-    let removed = 0, toxicRemoved = 0;
+  // Gewichtetes Abtragen: verteilt `amount` (m³) auf die Zellen [index, gewicht].
+  // Gibt { removed, toxicRemoved } zurück. Masse wird nie erzeugt oder vernichtet.
+  _drain(cells, amount) {
+    let wSum = 0, removed = 0, toxicRemoved = 0;
+    for (const c of cells) wSum += c[1];
     if (wSum === 0) return { removed, toxicRemoved };
     for (const [i, w] of cells) {
       const take = Math.min(this.mass[i], (amount * w) / wSum);
       this.mass[i] -= take;
       removed += take;
       if (this.toxic[i]) toxicRemoved += take;
-      if (this.mass[i] < 1e-4) { removed += this.mass[i]; if (this.toxic[i]) toxicRemoved += this.mass[i]; this.mass[i] = 0; this.toxic[i] = 0; }
+      if (this.mass[i] < 1e-4) {
+        removed += this.mass[i];
+        if (this.toxic[i]) toxicRemoved += this.mass[i];
+        this.mass[i] = 0; this.toxic[i] = 0;
+      }
     }
     return { removed, toxicRemoved };
+  }
+
+  // Draufsicht-Saugen um (cx, cy) – flächig. (Im Spiel wird der Querschnitt genutzt, siehe suckProfile.)
+  suck(cx, cy, radius, amount) {
+    const cells = [];
+    const x0 = Math.max(0, Math.floor(cx - radius)), x1 = Math.min(this.cols - 1, Math.ceil(cx + radius));
+    const y0 = Math.max(0, Math.floor(cy - radius)), y1 = Math.min(this.rows - 1, Math.ceil(cy + radius));
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / radius;
+        const i = this.idx(x, y);
+        if (d < 1 && this.mass[i] > 0) cells.push([i, 1 - d * d]);
+      }
+    }
+    return this._drain(cells, amount);
+  }
+
+  // Querschnitt entlang Zeile `row`: Spaltenhöhe = mass. Der Saugkopf sitzt bei (headX, headH)
+  // (headH = Höhe über Grund, gleiche Einheit wie mass). Gesaugt wird, was im Radius um den
+  // Kopf an der Schlammoberfläche liegt – der Kopf muss also nah an die Oberfläche.
+  suckProfile(row, headX, headH, radius, amount) {
+    const cells = [];
+    const x0 = Math.max(0, Math.floor(headX - radius)), x1 = Math.min(this.cols - 1, Math.ceil(headX + radius));
+    for (let x = x0; x <= x1; x++) {
+      const i = this.idx(x, row), m = this.mass[i];
+      if (m <= 0) continue;
+      const d = Math.hypot(x + 0.5 - headX, m - headH) / radius;
+      if (d < 1) cells.push([i, 1 - d * d]);
+    }
+    return this._drain(cells, amount);
   }
 }
