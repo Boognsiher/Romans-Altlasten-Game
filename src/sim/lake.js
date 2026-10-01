@@ -100,7 +100,7 @@ export class Lake {
   }
 
   // Zu tief abgetragen? (Oberfläche liegt unter der Sollsohle)
-  overdug(i, tolerance = 0.1) { return this.top[i] < this.target[i] - tolerance; }
+  overdug(i, tolerance = CONFIG.layer.tolerance) { return this.initial[i] === 1 && this.top[i] < this.target[i] - tolerance; }
 
   // Gewichtetes Abtragen: verteilt `amount` (Höhe in m) auf die Zellen [index, gewicht].
   // Der feste Untergrund unter der Sollsohle geht nur mit groundFirmness. Gibt Höhen zurück:
@@ -115,9 +115,11 @@ export class Lake {
       if (above <= 1e-6) eff *= CONFIG.layer.groundFirmness; // nur noch Untergrund
       const take = Math.min(this.top[i], ((amount * w) / wSum) * eff);
       const fromLayer = Math.min(take, above);
+      const tol = CONFIG.layer.tolerance, depth = () => Math.max(0, this.target[i] - this.top[i]);
+      const overBefore = Math.max(0, depth() - tol);
       this.top[i] -= take;
       this.mass[i] = Math.max(0, this.top[i] - this.target[i]);
-      removed += take; overdug += take - fromLayer;
+      removed += take; overdug += Math.max(0, depth() - tol) - overBefore; // erst tiefer als die Toleranz zählt
       if (this.toxic[i]) toxicRemoved += fromLayer;
       if (this.mass[i] > 0 && this.mass[i] < 0.01) { // winziger Rest: gilt als erledigt
         const rest = this.mass[i];
@@ -141,7 +143,7 @@ export class Lake {
       for (let x = x0; x <= x1; x++) {
         const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / radius;
         const i = this.idx(x, y);
-        if (d < 1 && this.mass[i] > 0) cells.push([i, 1 - d * d]);
+        if (d < 1 && this.initial[i]) cells.push([i, 1 - d * d]);
       }
     }
     return this._vol(this._drain(cells, amount / this.area));
@@ -155,7 +157,7 @@ export class Lake {
     const x0 = Math.max(0, Math.floor(headX - radius)), x1 = Math.min(this.cols - 1, Math.ceil(headX + radius));
     for (let x = x0; x <= x1; x++) {
       const i = this.idx(x, row), s = this.top[i];
-      if (s <= 0) continue;
+      if (s <= 0 || !this.initial[i]) continue; // nur die bestellte Fläche wird bearbeitet
       const d = Math.hypot(x + 0.5 - headX, s - headH) / radius;
       if (d < 1) cells.push([i, 1 - d * d]);
     }

@@ -25,6 +25,7 @@ export const CONFIG = {
   layer: {
     thickness: 1, // m
     cellArea: 4, // m² pro Rasterzelle: m³ = Dicke * cellArea
+    tolerance: 0.15, // m unter der Sollsohle, die noch als sauber abgetragen gelten (Schnitte sind nie exakt)
     groundFirmness: 0.35, // Untergrund lässt sich nur mit diesem Anteil der Leistung abtragen
     overdigCostPerM3: 120, // CHF pro m³ zu viel abgetragen (Wiederauffüllung, Gewässerschutz)
   },

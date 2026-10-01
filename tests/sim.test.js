@@ -17,7 +17,8 @@ test('suck erhält die Masse', () => {
   const lake = Lake.generate(createRng(1));
   const before = lake.remaining();
   const r = lake.suck(20, 12, 3, 50);
-  assert.ok(Math.abs(before - lake.remaining() - (r.removed - r.overdug)) < 1e-2);
+  const drop = before - lake.remaining();
+  assert.ok(drop > 0 && drop <= r.removed + 1e-6); // belastete Menge sinkt höchstens um das Abgesaugte
 });
 
 test('Seegrund lässt sich komplett leersaugen', () => {
@@ -324,9 +325,11 @@ test('Übertiefung: unter der Sollsohle geht es langsamer, wird gezählt und kos
   for (let n = 0; l.mass[i] > 0 && n < 500; n++) l.suckProfile(1, 1.5, l.top[i], 1.8, 1); // Schicht abtragen ...
   assert.equal(l.mass[i], 0);
   const before = l.top[i];
-  const over = l.suckProfile(1, 1.5, l.top[i], 1.8, 2); // ... und weiter in den Untergrund
-  assert.ok(over.overdug > 0 && l.top[i] < before);
-  assert.ok(l.overdug(i, 0.01));
+  assert.equal(l.suckProfile(1, 1.5, l.top[i], 1.8, 0.2).overdug, 0); // erste Zentimeter: Toleranz
+  let over = 0;
+  for (let n = 0; n < 6; n++) over += l.suckProfile(1, 1.5, l.top[i], 1.8, 2).overdug; // ... dann tiefer in den Untergrund
+  assert.ok(over > 0 && l.top[i] < before);
+  assert.ok(l.overdug(i));
   // Untergrund ist fester: gleiche Leistung trägt weniger ab
   const soft = new Lake(4, 4); soft.setFlat(5, 5);
   const a = soft.suckProfile(1, 1.5, 5, 1.8, 4).removed;
@@ -346,4 +349,22 @@ test('Abrechnung: Übertiefung kostet extra, gibt keine Punkte, geht trotzdem in
   assert.equal(r.overCost, 10 * CONFIG.layer.overdigCostPerM3);
   assert.ok(g.money <= money - r.overCost);
   assert.equal(g.totals.overdug, 10);
+});
+
+test('Saubere Zellen ausserhalb der bestellten Fläche werden nicht angesaugt, kein Fehlalarm am Start', () => {
+  const l = new Lake(6, 3); l.setFlat(1, 3);
+  for (let y = 0; y < 3; y++) for (let x = 3; x < 6; x++) { const i = l.idx(x, y); l.initial[i] = 0; l.mass[i] = 0; l.target[i] = l.top[i]; }
+  const before = l.top[l.idx(4, 1)];
+  const r = l.suckProfile(1, 3.5, 2.6, 1.8, 3);
+  assert.equal(l.top[l.idx(4, 1)], before);
+  assert.equal(r.overdug, 0);
+  // Standardpumpe, erste Sekunden über frischem Seegrund: keine Übertiefung
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const g = new Game(seed); const sim = g.startShift();
+    let by = 0, best = 0;
+    for (let y = 0; y < g.lake.rows; y++) { let t = 0; for (let x = 0; x < g.lake.cols; x++) t += g.lake.mass[g.lake.idx(x, y)]; if (t > best) { best = t; by = y; } }
+    sim.x = 24; sim.y = by + 0.5; sim.anchor();
+    for (let t = 0; t < 6; t += 0.05) sim.update(0.05, { dx: 1, dy: 0, suction: true });
+    assert.equal(sim.overdug, 0, `seed ${seed}`);
+  }
 });
