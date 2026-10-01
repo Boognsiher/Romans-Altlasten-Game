@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seesanierung Uetikon</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Seesanierung Uetikon</h1>
+    <div id="hud">
+      <span>Tag <b id="h-day"></b></span>
+      <span>Budget <b id="h-money"></b></span>
+      <span>Punkte <b id="h-score"></b></span>
+      <span>Sauber <b id="h-clean"></b></span>
+    </div>
+  </header>
+
+  <main>
+    <section id="stage">
+      <canvas id="canvas"></canvas>
+      <div id="shift-hud" hidden>
+        <span>Zeit <b id="s-time"></b></span>
+        <span>Abgesaugt <b id="s-removed"></b></span>
+        <span>Trübung <progress id="s-turb" max="1" value="0"></progress></span>
+      </div>
+      <div id="overlay"></div>
+    </section>
+
+    <aside id="panel">
+      <h2>Ausrüstung</h2>
+      <div id="upgrades"></div>
+      <button id="btn-start" class="primary">Schicht starten</button>
+      <button id="btn-wait">Tag aussetzen</button>
+      <h2>Journal</h2>
+      <ul id="log"></ul>
+    </aside>
+  </main>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

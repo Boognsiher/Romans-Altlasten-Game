@@ -1,0 +1,10 @@
+{
+  "name": "romans-altlasten-game",
+  "version": "0.1.0",
+  "description": "Seesanierung Uetikon als Spiel: Seegrund abfahren, absaugen, Entsorgung finanzieren.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test"
+  }
+}

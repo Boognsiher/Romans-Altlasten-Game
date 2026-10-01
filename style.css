@@ -1,0 +1,20 @@
+:root { --bg:#0e1a24; --panel:#16273a; --ink:#e8eef4; --muted:#8fa6ba; --accent:#3fb0c9; --bad:#ff7a6b; --good:#7bd88f; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.4 system-ui, sans-serif; }
+header { display:flex; flex-wrap:wrap; gap:8px 24px; align-items:center; justify-content:space-between; padding:10px 16px; background:var(--panel); }
+h1 { font-size:18px; margin:0; } h2 { font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 8px; }
+#hud, #shift-hud { display:flex; gap:16px; } #hud b, #shift-hud b { font-variant-numeric:tabular-nums; }
+main { display:grid; grid-template-columns: minmax(0,1fr) 300px; gap:16px; padding:16px; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+#stage { position:relative; background:#0a1219; border-radius:8px; overflow:hidden; }
+canvas { display:block; width:100%; height:auto; touch-action:none; }
+#shift-hud { position:absolute; top:8px; left:8px; background:#000a; padding:4px 10px; border-radius:6px; }
+#overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; background:#000b; padding:24px; }
+#overlay.show { display:flex; } #overlay div { max-width:380px; }
+#panel { background:var(--panel); border-radius:8px; padding:4px 16px 16px; }
+button { font:inherit; color:var(--ink); background:#24415c; border:0; border-radius:6px; padding:8px 12px; cursor:pointer; }
+button:hover:not(:disabled) { background:#2f5679; } button:disabled { opacity:.4; cursor:not-allowed; }
+button.primary { background:var(--accent); color:#04222b; font-weight:600; width:100%; margin:12px 0 6px; } button#btn-wait { width:100%; }
+.up { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; } .up small { color:var(--muted); display:block; }
+#log { list-style:none; margin:0; padding:0; max-height:240px; overflow:auto; font-size:13px; } #log li { padding:2px 0; color:var(--muted); }
+#log .good { color:var(--good); } #log .bad { color:var(--bad); }
