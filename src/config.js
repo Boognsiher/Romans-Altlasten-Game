@@ -20,6 +20,14 @@ export const CONFIG = {
     baseProb: { B: 0.65, E: 0.28, C: 0.07 },
     riskShift: { E: 0.3, C: 0.35 }, // bei Risiko 1: so viel Wahrscheinlichkeit wandert von B zu E bzw. C
   },
+  // Die belastete Schicht ist überall gleich dick und folgt dem unebenen Seegrund (Sollsohle = Oberfläche - thickness).
+  // Darunter liegt fester, sauberer Untergrund: wer dort weitersaugt, trägt zu viel ab (Übertiefung).
+  layer: {
+    thickness: 1, // m
+    cellArea: 4, // m² pro Rasterzelle: m³ = Dicke * cellArea
+    groundFirmness: 0.35, // Untergrund lässt sich nur mit diesem Anteil der Leistung abtragen
+    overdigCostPerM3: 120, // CHF pro m³ zu viel abgetragen (Wiederauffüllung, Gewässerschutz)
+  },
   // Harte Schichten: Absaugleistung dort geteilt durch (1 + Härte * factor) -> mehrere Überfahrten
   hard: { blobs: 7, factor: 1.5 },
   // Fremdstoffe verstopfen die Pumpe (Sekunden Zwangspause, Fremdstoff ist danach weg)
@@ -58,7 +66,7 @@ export const BASE_STATS = {
   plantCapacity: 50, // m³/Tag, die die Anlage verarbeitet
   bufferCapacity: 150, // m³ Puffer vor der Anlage; ist er voll, muss das Saugen pausieren
   dewater: 0.6, // Volumenanteil nach der Entwässerung (kleiner = weniger Entsorgung)
-  stability: 2.0, // Standfestigkeit der Pumpe: so viel m³ pro gefahrene Zelle darf sie abtragen, ohne zu kippen
+  stability: 0.7, // Standfestigkeit der Pumpe: so viele m Abtragtiefe pro gefahrene Zelle verträgt sie, ohne zu kippen
   autoLevel: 0, // Automatik-Stufe des Saugkopfs
   droneBattery: 60, // Sekunden Flugzeit der Tauchdrohne
   droneRadius: 2, // Scanradius in Zellen
@@ -114,7 +122,7 @@ export const UPGRADES = {
     name: 'Pumpen-Ballast',
     desc: 'Pumpe steht fester und kippt später',
     maxLevel: 4, baseCost: 6000, growth: 1.5,
-    apply: (s, lvl) => { s.stability += lvl * 0.9; },
+    apply: (s, lvl) => { s.stability += lvl * 0.25; },
   },
   auto: {
     group: 'ponton',

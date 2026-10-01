@@ -117,7 +117,7 @@ function endShift() {
   showOverlay(`<h2>Schicht beendet</h2>
     <p>${r.removed.toFixed(1)} m³ abgesaugt (davon ${r.toxicRemoved.toFixed(1)} m³ Altlasten)<br>
     +${r.points} Punkte · Der Schlamm wartet im Puffer auf die Anlage
-    ${r.clogs ? `<br>${r.clogs}× Pumpe verstopft` : ''}${r.tips ? `<br>${r.tips}× Pumpe umgekippt, Bergung −${chf(r.repairs)}` : ''}${r.fines ? `<br>Busse −${chf(r.fines)}` : ''}</p>
+    ${r.clogs ? `<br>${r.clogs}× Pumpe verstopft` : ''}${r.overdug > 0.5 ? `<br>${r.overdug.toFixed(0)} m³ zu tief abgetragen, −${chf(r.overCost)}` : ''}${r.tips ? `<br>${r.tips}× Pumpe umgekippt, Bergung −${chf(r.repairs)}` : ''}${r.fines ? `<br>Busse −${chf(r.fines)}` : ''}</p>
     <button class="primary" id="btn-ok">Weiter</button>`);
   $('btn-ok').onclick = hideOverlay;
 }
@@ -182,7 +182,7 @@ function frame(now) {
       $('btn-fix').hidden = !sl.auto.error;
     }
     $('s-time').textContent = `${Math.ceil(sim.timeLeft)}s`;
-    $('s-removed').textContent = `${sim.removed.toFixed(1)} m³${sim.bufferFull ? ' – Puffer voll, Pumpe pausiert!' : ''}`;
+    $('s-removed').textContent = `${sim.removed.toFixed(1)} m³${sim.overdug > 0.5 ? ` (zu tief: ${sim.overdug.toFixed(0)})` : ''}${sim.bufferFull ? ' – Puffer voll, Pumpe pausiert!' : ''}`;
     $('s-turb').value = sim.turbidity;
     $('s-tilt').value = sim.mode === 'slice' ? sim.slice.tilt : 0;
     if (sim.over) endShift();
@@ -198,7 +198,7 @@ showOverlay(`<h2>Seesanierung Uetikon</h2>
   Im <b>Querschnitt</b> hängt die Pumpe an einer Kette am Ponton: A/D fährt sie seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse). Der Einsaugbereich liegt unten rechts von der Pumpe, deshalb saugt sie mit gehaltener <b>Leertaste</b> / Mausklick nur nach rechts. Gräbst du zu tief, kippt sie um: bei Schieflage die Kette hochziehen.
   Der Rückweg saugt nicht, ist dafür schneller. <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Automatik-Reset.</p>
   <p>Schraffierte Zellen sind hart: dort brauchst du mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben und drüber fahren hilft).
-  Rot = Altlasten. Zu viel Trübung gibt Bussen. Alle ${CONFIG.trancheEveryDays} Tage kommt eine Tranche.
+  Rot = Altlasten. Die belastete Schicht ist überall genau 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, trägt sauberen Untergrund ab und zahlt dafür (orange auf der Karte). Zu viel Trübung gibt Bussen. Alle ${CONFIG.trancheEveryDays} Tage kommt eine Tranche.
   Zum Schluss nimmt die <b>Tauchdrohne</b> den Seegrund ab, erst dann gilt der See als saniert.</p>
   <button class="primary" id="btn-go">Los</button>`);
 $('btn-go').onclick = hideOverlay;

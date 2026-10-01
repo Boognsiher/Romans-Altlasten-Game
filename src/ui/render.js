@@ -18,7 +18,7 @@ export function drawMap(ctx, lake, sim) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x, m = mass[i];
       if (m <= 0) continue;
-      const a = Math.min(1, 0.25 + m / 8);
+      const a = 0.35 + 0.55 * Math.min(1, m);
       ctx.fillStyle = toxic[i] ? `rgba(200,70,60,${a})` : `rgba(120,95,60,${a})`;
       ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
       if (lake.hard[i]) { // Schraffur: hart = Kreuz, verdichtet = Strich
@@ -34,6 +34,7 @@ export function drawMap(ctx, lake, sim) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       if (lake.accepted[i] && lake.initial[i]) { ctx.fillStyle = 'rgba(90,230,130,.35)'; ctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
+      if (lake.overdug(i)) { ctx.fillStyle = 'rgba(255,170,0,.4)'; ctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
       if (lake.flagged[i]) { ctx.strokeStyle = '#ff5d4d'; ctx.lineWidth = 2; ctx.strokeRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4); }
     }
   }
@@ -81,32 +82,44 @@ export function drawSlice(ctx, lake, sim) {
     ctx.beginPath(); ctx.ellipse(bx, by, 14, 6, (i % 3) * 0.5, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(bx + 18, by); ctx.lineTo(bx + 34, by + 4); ctx.stroke();
   }
-  // Schlammprofil
-  const m = (c) => lake.mass[lake.idx(sl.x0 + c, sl.row)];
-  ctx.beginPath(); ctx.moveTo(0, yOf(0));
-  ctx.lineTo(0, yOf(m(0)));
-  for (let c = 0; c < SLICE.cols; c++) ctx.lineTo((c + 0.5) * U, yOf(m(c)));
-  ctx.lineTo(W, yOf(m(SLICE.cols - 1))); ctx.lineTo(W, yOf(0)); ctx.closePath();
-  ctx.fillStyle = '#7a5f3c'; ctx.fill();
-  ctx.strokeStyle = '#a58760'; ctx.lineWidth = 3; ctx.stroke();
-  // Harte Schichten (dunkel) und Fremdstoffe (Rad) auf dem Profil
+  // Profil: fester Untergrund, belastete Schicht (überall gleich dick) und Übertiefung als Flächen
+  const col = (c) => lake.idx(sl.x0 + c, sl.row), xs = (c) => (c + 0.5) * U;
+  const T = (c) => lake.top[col(c)], G = (c) => lake.target[col(c)];
+  const band = (lowerH, upperH, fill) => {
+    ctx.beginPath(); ctx.moveTo(0, yOf(upperH(0)));
+    for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(upperH(c)));
+    ctx.lineTo(W, yOf(upperH(SLICE.cols - 1))); ctx.lineTo(W, yOf(lowerH(SLICE.cols - 1)));
+    for (let c = SLICE.cols - 1; c >= 0; c--) ctx.lineTo(xs(c), yOf(lowerH(c)));
+    ctx.lineTo(0, yOf(lowerH(0))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  };
+  band(() => 0, (c) => Math.min(T(c), G(c)), '#5d5b52'); // fester Untergrund
+  band((c) => Math.min(T(c), G(c)), G, 'rgba(235,90,60,.5)'); // Übertiefung: tiefer als die Sollsohle
+  band(G, (c) => Math.max(T(c), G(c)), '#7a5f3c'); // belastete Schicht
+  ctx.beginPath(); ctx.moveTo(0, yOf(T(0)));
+  for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(T(c)));
+  ctx.lineTo(W, yOf(T(SLICE.cols - 1))); ctx.strokeStyle = '#a58760'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, yOf(G(0))); // Sollsohle
+  for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(G(c)));
+  ctx.lineTo(W, yOf(G(SLICE.cols - 1)));
+  ctx.strokeStyle = '#ffd24dcc'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.stroke(); ctx.setLineDash([]);
+  // Harte Schichten (dunkel) und Fremdstoffe (Rad)
   for (let c = 0; c < SLICE.cols; c++) {
-    const i = lake.idx(sl.x0 + c, sl.row), mm = lake.mass[i];
+    const i = col(c), mm = lake.mass[i];
     if (lake.hard[i] && mm > 0) {
       ctx.fillStyle = lake.hard[i] > 1 ? 'rgba(25,18,10,.6)' : 'rgba(25,18,10,.32)';
-      ctx.fillRect(c * U, yOf(mm), U, mm * U);
+      ctx.fillRect(c * U, yOf(T(c)), U, mm * U);
     }
     if (lake.debris[i]) {
-      const cx = (c + 0.5) * U, cy = yOf(mm) - 10;
+      const cx = xs(c), cy = yOf(T(c)) - 10;
       ctx.strokeStyle = '#e6ebef'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.moveTo(cx - 9, cy); ctx.lineTo(cx + 9, cy); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx, cy + 9); ctx.stroke();
     }
   }
-  // Altlasten-Fässer in giftigen Zellen
+  // Altlasten-Fässer in giftigen Zellen (mitten in der Schicht)
   for (let c = 0; c < SLICE.cols; c++) {
-    const i = lake.idx(sl.x0 + c, sl.row);
+    const i = col(c);
     if (!lake.toxic[i] || lake.mass[i] < 0.3) continue;
-    const cx = (c + 0.5) * U, cy = yOf(lake.mass[i] / 2);
+    const cx = xs(c), cy = yOf((T(c) + G(c)) / 2);
     ctx.fillStyle = '#b8473c'; ctx.fillRect(cx - 14, cy - 17, 28, 34);
     ctx.fillStyle = '#e9d36a'; ctx.fillRect(cx - 14, cy - 4, 28, 6);
     ctx.strokeStyle = '#3a0f0b'; ctx.lineWidth = 2; ctx.strokeRect(cx - 14, cy - 17, 28, 34);

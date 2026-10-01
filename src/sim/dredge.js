@@ -22,6 +22,7 @@ export class DredgeSim {
     this.y = 1;
     this.removed = 0; // m³ gesamt in dieser Schicht
     this.toxicRemoved = 0;
+    this.overdug = 0; // m³ unter der Sollsohle abgetragen (zu tief)
     this.turbidity = 0; // 0..1
     this.fines = 0; // CHF
     this.over = false;
@@ -67,6 +68,7 @@ export class DredgeSim {
       for (const n of this.slice.notes.splice(0)) { this.notes.push(n); if (n.kind === 'clog') this.clogs++; if (n.kind === 'tip') { this.tips++; this.repairs += CONFIG.pump.repairCost; } }
       this.removed += r.removed;
       this.toxicRemoved += r.toxicRemoved;
+      this.overdug += r.overdug;
       if (this.slice.suctioning) {
         // Aufgewirbelter Schlamm: mehr Leistung, Bewegung und Altlasten -> mehr Trübung
         const boost = (this.slice.moving ? 1.4 : 1) * (r.toxicRemoved > 0 ? 1.5 : 1);
@@ -83,7 +85,7 @@ export class DredgeSim {
 
   // Ergebnis der Schicht: Abrechnung macht Game.
   result() {
-    return { removed: this.removed, toxicRemoved: this.toxicRemoved, fines: Math.round(this.fines), clogs: this.clogs, tips: this.tips, repairs: this.repairs };
+    return { removed: this.removed, toxicRemoved: this.toxicRemoved, overdug: this.overdug, fines: Math.round(this.fines), clogs: this.clogs, tips: this.tips, repairs: this.repairs };
   }
 }
 

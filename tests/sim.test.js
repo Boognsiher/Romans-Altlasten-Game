@@ -17,7 +17,7 @@ test('suck erhält die Masse', () => {
   const lake = Lake.generate(createRng(1));
   const before = lake.remaining();
   const r = lake.suck(20, 12, 3, 50);
-  assert.ok(Math.abs(before - lake.remaining() - r.removed) < 1e-3);
+  assert.ok(Math.abs(before - lake.remaining() - (r.removed - r.overdug)) < 1e-2);
 });
 
 test('Seegrund lässt sich komplett leersaugen', () => {
@@ -39,7 +39,7 @@ test('Karte saugt nicht, Querschnitt schon', () => {
   const sim = g.startShift();
   sim.update(1, { dx: 0, dy: 0, suction: true });
   assert.equal(sim.removed, 0);
-  g.lake.mass.fill(5); sim.anchor(); sim.slice.h = 5;
+  g.lake.setFlat(5); sim.anchor(); sim.slice.h = 5;
   sim.update(0.5, { dx: 0, dy: 0, suction: true });
   assert.equal(sim.removed, 0); // Stillstand saugt nicht
   sim.update(0.5, { dx: 1, dy: 0, suction: true });
@@ -59,7 +59,7 @@ test('Anker nur in der Karte, Lichten nur im Querschnitt, Uhr läuft in beiden',
 
 test('Querschnitt: Saugkopf dringt nicht in den Grund, Fenster liegt im See', () => {
   const g = new Game(3);
-  g.lake.mass.fill(4);
+  g.lake.setFlat(4);
   const sim = g.startShift(); sim.x = 0; sim.anchor();
   assert.equal(sim.slice.x0, 0);
   for (let i = 0; i < 100; i++) sim.update(0.1, { dx: 0, dy: 1, suction: false });
@@ -70,7 +70,7 @@ test('Querschnitt: Saugkopf dringt nicht in den Grund, Fenster liegt im See', ()
 
 test('Querschnitt: Saugkopf in der Höhe saugt nichts', () => {
   const lake = Lake.generate(createRng(1));
-  lake.mass.fill(2); lake.hard.fill(0);
+  lake.setFlat(2);
   assert.equal(lake.suckProfile(5, 10, 12, 1.8, 100).removed, 0);
   const r = lake.suckProfile(5, 10, 2, 1.8, 3);
   assert.ok(Math.abs(r.removed - 3) < 1e-6);
@@ -91,7 +91,7 @@ test('Schicht: Material geht in den Puffer, Tag wird weitergeschaltet', () => {
 
 test('Puffer voll: Pumpe pausiert', () => {
   const g = new Game(4);
-  g.lake.mass.fill(5);
+  g.lake.setFlat(5);
   const sim = new DredgeSim(g.lake, computeStats(), 100, 3);
   sim.anchor(); sim.slice.h = 5;
   for (let i = 0; i < 100; i++) sim.update(0.1, { dx: (i % 40) < 20 ? 1 : -1, dy: 0, suction: true });
@@ -142,7 +142,7 @@ test('Bankrott beendet das Spiel', () => {
 
 test('Querschnitt: Saugen nur in Arbeitsrichtung, nur eine Achse, Rückweg ist schneller', () => {
   const g = new Game(3);
-  g.lake.mass.fill(5);
+  g.lake.setFlat(5);
   const sim = g.startShift(); sim.anchor();
   const sl = sim.slice; sl.h = 5;
   sl.x = sl.x0 + 8; sl.h = 5;
@@ -158,12 +158,12 @@ test('Querschnitt: Saugen nur in Arbeitsrichtung, nur eine Achse, Rückweg ist s
   assert.ok(sl.h <= hs && Math.abs(sl.h - (hs - 4 * 0.1)) < 1e-6); // nur Gravität, keine vertikale Eingabe
 });
 
-const flat = (g, m = 5) => { g.lake.mass.fill(m); g.lake.hard.fill(0); g.lake.debris.fill(0); return g.lake; };
+const flat = (g, m = 5) => g.lake.setFlat(m); // ebener See, belastete Schicht m dick, Sollsohle bei 0
 const sweep = (sim, seconds, dir = 1) => { for (let t = 0; t < seconds; t += 0.1) sim.update(0.1, { dx: dir, dy: 0, suction: true }); };
 
 test('Harte Schicht: gleiche Leistung entfernt weniger, mehrere Überfahrten nötig', () => {
   const a = Lake.generate(createRng(1)), b = Lake.generate(createRng(1));
-  for (const l of [a, b]) { l.mass.fill(5); l.hard.fill(0); }
+  for (const l of [a, b]) l.setFlat(5);
   b.hard.fill(2);
   const soft = a.suckProfile(5, 10, 5, 1.8, 2).removed, hard = b.suckProfile(5, 10, 5, 1.8, 2).removed;
   assert.ok(hard < soft * 0.5);
@@ -259,10 +259,12 @@ test('Einsaugstelle liegt unten rechts der Pumpe; links der Pumpe wird nichts ge
   const m = sl.mouth();
   assert.equal(m.x, sl.x + P.offsetX);
   assert.equal(m.h, sl.h - P.offsetY);
-  for (let c = 0; c < 8; c++) lake.mass[lake.idx(sl.x0 + c, sl.row)] = 5; // nur links der Pumpe
+  lake.top.fill(0); lake.target.fill(0); lake.mass.fill(0); // alles leer ...
+  const put = (c, m) => { const i = lake.idx(sl.x0 + c, sl.row); lake.top[i] = m; lake.target[i] = 0; lake.mass[i] = m; };
+  for (let c = 0; c < 8; c++) put(c, 5); // ... nur links der Pumpe
   sim.update(0.2, { dx: 1, dy: 0, suction: true });
   assert.equal(sim.removed, 0);
-  lake.mass[lake.idx(sl.x0 + 12, sl.row)] = 5; // rechts der Pumpe
+  put(12, 5); // rechts der Pumpe
   sl.h = 5;
   sim.update(0.2, { dx: 1, dy: 0, suction: true });
   assert.ok(sim.removed > 0);
@@ -300,4 +302,48 @@ test('Automatik ab Stufe 2 zieht die Pumpe bei Schieflage hoch', () => {
   sim.toggleAuto();
   for (let i = 0; i < 400; i++) sim.update(0.05, {});
   assert.equal(sim.tips, 0);
+});
+
+test('Seegrund: belastete Schicht ist überall genau eine Schichtdicke dick, Oberfläche ist uneben', () => {
+  const l = Lake.generate(createRng(5)), T = CONFIG.layer.thickness;
+  let n = 0, min = 99, max = 0;
+  for (let i = 0; i < l.mass.length; i++) {
+    min = Math.min(min, l.top[i]); max = Math.max(max, l.top[i]);
+    if (l.initial[i]) { n++; assert.ok(Math.abs(l.mass[i] - T) < 1e-6); assert.ok(Math.abs(l.top[i] - l.target[i] - T) < 1e-5); }
+    else assert.equal(l.mass[i], 0);
+  }
+  assert.ok(n > 100);
+  assert.ok(max - min > 1.5); // nicht flach
+});
+
+test('Übertiefung: unter der Sollsohle geht es langsamer, wird gezählt und kostet', () => {
+  const l = new Lake(4, 4); l.setFlat(1, 3); // Schicht 1 m, Oberfläche 3, Sollsohle 2
+  const first = l.suckProfile(1, 1.5, 2.6, 1.8, 2); // trägt die Schicht ab
+  assert.ok(first.overdug < 1e-6 && l.remaining() < 4 * 4 * 4 * 1 + 1e-6);
+  const i = l.idx(1, 1);
+  for (let n = 0; l.mass[i] > 0 && n < 500; n++) l.suckProfile(1, 1.5, l.top[i], 1.8, 1); // Schicht abtragen ...
+  assert.equal(l.mass[i], 0);
+  const before = l.top[i];
+  const over = l.suckProfile(1, 1.5, l.top[i], 1.8, 2); // ... und weiter in den Untergrund
+  assert.ok(over.overdug > 0 && l.top[i] < before);
+  assert.ok(l.overdug(i, 0.01));
+  // Untergrund ist fester: gleiche Leistung trägt weniger ab
+  const soft = new Lake(4, 4); soft.setFlat(5, 5);
+  const a = soft.suckProfile(1, 1.5, 5, 1.8, 4).removed;
+  const hard = new Lake(4, 4); hard.setFlat(1, 3); hard.mass.fill(0); hard.target.fill(3);
+  const b = hard.suckProfile(1, 1.5, 3, 1.8, 4).removed;
+  assert.ok(b < a * 0.5);
+});
+
+test('Abrechnung: Übertiefung kostet extra, gibt keine Punkte, geht trotzdem in den Puffer', () => {
+  const g = new Game(19);
+  g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a });
+  const sim = new DredgeSim(g.lake, computeStats(), 1);
+  sim.removed = 20; sim.overdug = 10; sim.toxicRemoved = 0;
+  const money = g.money;
+  const r = g.finishShift(sim);
+  assert.equal(r.points, 10 * CONFIG.pointsPerUnit); // nur 10 m³ belastet
+  assert.equal(r.overCost, 10 * CONFIG.layer.overdigCostPerM3);
+  assert.ok(g.money <= money - r.overCost);
+  assert.equal(g.totals.overdug, 10);
 });

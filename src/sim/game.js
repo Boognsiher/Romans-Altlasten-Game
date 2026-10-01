@@ -19,7 +19,7 @@ export class Game {
     this.levels = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
     this.stock = { normal: 0, toxic: 0 }; // Rohschlamm im Puffer vor der Anlage (m³)
     this.overclock = false; // Anlage übertakten: mehr Durchsatz, höheres Risiko teurer Klassen
-    this.totals = { removed: 0, disposalPaid: 0, finesPaid: 0, eventCosts: 0, classes: { B: 0, E: 0, C: 0 } };
+    this.totals = { removed: 0, disposalPaid: 0, finesPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
     this.status = 'playing'; // 'playing' | 'won' | 'lost'
     this.log = [];
   }
@@ -50,20 +50,23 @@ export class Game {
   // Rechnet eine beendete Schicht ab (Material geht in den Puffer) und schaltet einen Tag weiter.
   finishShift(sim) {
     const r = sim.result();
-    const toxic = r.toxicRemoved, normal = r.removed - r.toxicRemoved;
-    const points = Math.round((normal + toxic * CONFIG.toxicPointsMultiplier) * CONFIG.pointsPerUnit);
-    this.stock.normal += normal;
+    const toxic = r.toxicRemoved, layer = r.removed - r.overdug; // nur belastetes Material gibt Punkte
+    const points = Math.round((layer - toxic + toxic * CONFIG.toxicPointsMultiplier) * CONFIG.pointsPerUnit);
+    const overCost = Math.round((r.overdug * CONFIG.layer.overdigCostPerM3) / 10) * 10;
+    this.stock.normal += r.removed - toxic; // zu viel abgetragener Boden muss auch entsorgt werden
     this.stock.toxic += toxic;
-    this.money -= r.fines + r.repairs;
+    this.money -= r.fines + r.repairs + overCost;
     this.score += points;
     this.totals.removed += r.removed;
+    this.totals.overdug += r.overdug;
     this.totals.finesPaid += r.fines;
     this.say(`Schicht: ${r.removed.toFixed(1)} m³ abgesaugt, +${points} Punkte`);
     if (r.clogs) this.say(`${r.clogs}× Pumpe verstopft (Fremdstoffe)`, 'bad');
+    if (r.overdug > 0.5) this.say(`${r.overdug.toFixed(0)} m³ zu tief abgetragen: Wiederauffüllung und Gewässerschutz −${overCost} CHF`, 'bad');
     if (r.tips) this.say(`Pumpe ${r.tips}× umgekippt, Bergung −${r.repairs} CHF`, 'bad');
     if (r.fines) this.say(`Trübungs-Busse −${r.fines} CHF`, 'bad');
     this.advanceDays(1);
-    return { ...r, points };
+    return { ...r, points, overCost };
   }
 
   startDrone() { return new DroneSim(this.lake, this.stats); }

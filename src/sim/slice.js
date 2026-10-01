@@ -4,7 +4,9 @@ import { CONFIG, DEBRIS } from '../config.js';
 // Spaltenhöhe = Schlammmenge der Zelle (gleiche Einheit), so bleibt Karte und Querschnitt konsistent.
 // work = Arbeitsrichtung: nur in diese Richtung (rechts bzw. nach unten) wird gesaugt.
 // Rückwärts wird nicht gesaugt; der Kopf muss zum Anfang zurückgezogen werden (schneller).
-export const SLICE = { cols: 16, viewH: 10, sinkSpeed: 4, work: { x: 1, y: 1 }, returnBoost: 1.6 };
+export const SLICE = { cols: 16, viewH: 8, sinkSpeed: 4, work: { x: 1, y: 1 }, returnBoost: 1.6 };
+
+const ZERO = { removed: 0, toxicRemoved: 0, overdug: 0 };
 
 const AUTO_ERRORS = [
   { id: 'stuck', text: 'Automatik hängt sich auf und starrt ins Wasser' },
@@ -26,6 +28,7 @@ export class SliceSim {
     this.blocked = false; // z. B. Puffer voll: kein Saugen
     this.tilt = 0; // Schieflage der Pumpe 0..1 (bei 1 kippt sie um)
     this.tipped = 0; // Sekunden, bis die umgekippte Pumpe wieder steht
+    this.overNote = 0; // Sperrzeit für die Übertiefungs-Meldung
     this.clog = 0; // Sekunden Zwangspause wegen Fremdstoff
     this.auto = { on: false, dir: 'sweep', error: null, errLeft: 0 };
     this.notes = []; // Meldungen für die Oberfläche: { kind, text }
@@ -35,7 +38,7 @@ export class SliceSim {
 
   surfaceAt(x) {
     const c = clamp(Math.floor(x), 0, this.lake.cols - 1);
-    return this.lake.mass[this.lake.idx(c, this.row)];
+    return this.lake.top[this.lake.idx(c, this.row)]; // Oberfläche (Höhe über Felsgrund)
   }
 
   // Einsaugstelle: unten und rechts von der Pumpe (x, h = Pumpenstandort)
@@ -92,8 +95,9 @@ export class SliceSim {
       this.suctioning = false; this.moving = false;
       this.h = Math.min(SLICE.viewH * 0.6, this.h + 3 * dt);
       if (this.tipped <= 0) { this.tipped = 0; this.tilt = 0; this.say('info', 'Pumpe steht wieder. Sie tut so, als wäre nichts gewesen.'); }
-      return { removed: 0, toxicRemoved: 0 };
+      return ZERO;
     }
+    this.overNote = Math.max(0, this.overNote - dt);
     let ctl = input;
     if (a.on) {
       const manual = Math.abs(input.dx || 0) > 0.2 || Math.abs(input.dy || 0) > 0.2;
@@ -123,7 +127,7 @@ export class SliceSim {
     this.suctioning = working && (dx === 0 || Math.abs(this.x - oldX) > 1e-9);
     if (!this.suctioning) {
       this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
-      return { removed: 0, toxicRemoved: 0 };
+      return ZERO;
     }
 
     // Fremdstoff an der Einsaugstelle? Wer den Kopf anhebt, fährt drüber weg.
@@ -135,15 +139,19 @@ export class SliceSim {
       this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : CONFIG.debris.clogSeconds;
       this.suctioning = false;
       this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`);
-      return { removed: 0, toxicRemoved: 0 };
+      return ZERO;
     }
     const res = this.lake.suckProfile(this.row, m.x, m.h, s.radius, s.power * dt);
 
     // Zu tief abgetragen? Pro gefahrene Zelle wird zu viel Material weggesaugt: der Boden bricht
     // vor der Pumpe weg und sie kippt nach vorne. Höher ziehen, schneller fahren oder Ballast helfen.
-    const dist = Math.abs(this.x - oldX), cut = dist > 1e-9 ? res.removed / dist : 0;
+    const dist = Math.abs(this.x - oldX), cut = dist > 1e-9 ? res.removed / this.lake.area / dist : 0;
     if (cut > s.stability) this.tilt += (cut - s.stability) * P.tiltRate * dt;
     else this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
+    if (res.overdug > 1e-6 && this.overNote <= 0) {
+      this.say('bad', 'Zu tief abgetragen! Der Seegrund ist jetzt tiefer als bestellt (und der Kanton hat es gemerkt).');
+      this.overNote = 8;
+    }
     if (this.tilt >= 1) {
       this.tilt = 1; this.tipped = P.tipSeconds; this.suctioning = false;
       this.say('tip', 'Pumpe gekippt! Sie liegt jetzt in der Baugrube und nennt es Mittagspause.');
