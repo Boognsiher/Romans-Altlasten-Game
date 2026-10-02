@@ -148,7 +148,7 @@ export class Lake {
       removed += take; overdug += Math.max(0, depth() - tol) - overBefore; // erst tiefer als die Toleranz zählt
       if (this.toxic[i]) toxicRemoved += fromLayer;
       if (this.hard[i]) hardRemoved += fromLayer; // Mehraufwand durch harte Schicht (Grundlage für Nachträge)
-      if (this.mass[i] > 0 && this.mass[i] < 0.01) { // winziger Rest: gilt als erledigt
+      if (this.mass[i] > 0 && this.mass[i] < CONFIG.layer.snap) { // winziger Rest: gilt als erledigt
         const rest = this.mass[i];
         this.top[i] = this.target[i]; this.mass[i] = 0;
         removed += rest;
@@ -183,6 +183,11 @@ export class Lake {
   // Gesaugt wird, was im Radius an der Oberfläche liegt: Der Kopf muss also nah an die Oberfläche.
   // amount in m³; Ergebnis in m³.
   suckProfile(row, headX, headH, radius, amount) {
+    return this._vol(this._drain(this._profileCells(row, headX, headH, radius), amount / this.area));
+  }
+
+  // Zellen [index, gewicht] einer Zeile im Saugbereich um (headX, headH)
+  _profileCells(row, headX, headH, radius) {
     const cells = [];
     const x0 = Math.max(0, Math.floor(headX - radius)), x1 = Math.min(this.cols - 1, Math.ceil(headX + radius));
     for (let x = x0; x <= x1; x++) {
@@ -191,6 +196,21 @@ export class Lake {
       const d = Math.hypot(x + 0.5 - headX, s - headH) / radius;
       if (d < 1) cells.push([i, 1 - d * d]);
     }
-    return this._vol(this._drain(cells, amount / this.area));
+    return cells;
+  }
+
+  // Der ganze Kasten unter dem Ponton: die Pumpenleistung verteilt sich gleichmässig auf alle Zeilen `rows`, in denen
+  // an der Einsaugstelle etwas zu holen ist. Die Einsaugstelle folgt dem Gelände jeder Zeile (gleicher Abstand zur
+  // lokalen Oberfläche wie in der Mittelzeile).
+  suckSwath(rows, centerRow, headX, headH, radius, amount) {
+    const mc = Math.min(this.cols - 1, Math.max(0, Math.floor(headX))), base = this.top[this.idx(mc, centerRow)];
+    const work = rows.map((r) => this._profileCells(r, headX, Math.max(0, headH + (this.top[this.idx(mc, r)] - base)), radius)).filter((cells) => cells.length);
+    const sum = { removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0, fossilsLost: [] };
+    for (const cells of work) {
+      const res = this._vol(this._drain(cells, amount / work.length / this.area));
+      sum.removed += res.removed; sum.toxicRemoved += res.toxicRemoved; sum.overdug += res.overdug; sum.hardRemoved += res.hardRemoved;
+      sum.fossilsLost.push(...res.fossilsLost);
+    }
+    return sum;
   }
 }

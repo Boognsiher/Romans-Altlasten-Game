@@ -23,11 +23,15 @@ export const CONFIG = {
     baseProb: { B: 0.65, E: 0.28, C: 0.07 },
     riskShift: { E: 0.3, C: 0.35 }, // bei Risiko 1: so viel Wahrscheinlichkeit wandert von B zu E bzw. C
   },
+  // Der Kasten unter dem Ponton: Pumpe und Drohne arbeiten immer auf so vielen Karten-Zeilen gleichzeitig.
+  // Der Querschnitt zeigt die mittlere Zeile; die Pumpenleistung verteilt sich auf alle Zeilen des Kastens.
+  box: { rows: 5 },
   // Die belastete Schicht ist überall gleich dick und folgt dem unebenen Seegrund (Sollsohle = Oberfläche - thickness).
   // Darunter liegt fester, sauberer Untergrund: wer dort weitersaugt, trägt zu viel ab (Übertiefung).
   layer: {
     thickness: 1, // m
     cellArea: 4, // m² pro Rasterzelle: m³ = Dicke * cellArea
+    snap: 0.04, // m: so kleine Reste gelten beim Absaugen als erledigt
     tolerance: 0.15, // m unter der Sollsohle, die noch als sauber abgetragen gelten (Schnitte sind nie exakt)
     groundFirmness: 0.35, // Untergrund lässt sich nur mit diesem Anteil der Leistung abtragen
     overdigCostPerM3: 120, // CHF pro m³ zu viel abgetragen (Wiederauffüllung, Gewässerschutz)
@@ -90,7 +94,7 @@ export const CONFIG = {
   pumpSpeed: { min: 0.2, max: 1, default: 1 }, // Tempo-Regler der Pumpe (Anteil des Höchsttempos)
   // Tauchdrohne: Abnahme des gereinigten Seegrunds und Befliegungsdaten
   drone: {
-    fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9, // Restschlamm (m³) pro Zelle für eine Abnahme
+    fee: 800, acceptMax: 0.1, winAcceptFraction: 0.9, // höchstens so viel Restschicht (m) pro Zelle für eine Abnahme
     docPerCell: 8, // CHF, die die Behörde pro neu dokumentierter Zelle zahlt (vorher und nachher, je einmal)
     // Die Drohne taucht nur im Kasten unter dem Ponton (Querschnittsfenster). Sie sieht nur im Lichtkegel in Fahrtrichtung,
     // leicht nach unten; gescannt wird nur, was beleuchtet ist, wenn sie langsam und nah am Boden fährt.
@@ -100,7 +104,6 @@ export const CONFIG = {
       scanSeconds: 0.8, // so lange muss eine Spalte unter idealen Bedingungen beleuchtet sein
       maxScanSpeed: 2.2, // Einheiten/s: schneller als das wird nichts mehr gescannt
       clearance: 0.3, // Mindestabstand zum Boden
-      boxRows: 5, // der Kasten deckt so viele Karten-Zeilen ab (Ergebnis gilt für alle)
     },
   },
   turbidityFineThreshold: 0.8,

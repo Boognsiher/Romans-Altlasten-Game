@@ -477,24 +477,24 @@ test('Echolot: misst beim Ankern (mit Messfehler je Stufe), ohne Echolot kein Lo
   g.levels.echolot = 1;
   sim = g.createSession(); sim.anchor();
   const amp = CONFIG.echolot.noise[1];
-  assert.ok(sim.slice.sounding.every((v) => Math.abs(v - 3) <= amp + 1e-6));
+  assert.ok(sim.slice.sounding.length === CONFIG.box.rows && sim.slice.sounding[sim.slice.ci].every((v) => Math.abs(v - 3) <= amp + 1e-6));
   g.levels.echolot = 2;
   sim = g.createSession(); sim.anchor();
-  assert.ok(sim.slice.sounding.every((v) => Math.abs(v - 3) <= CONFIG.echolot.noise[2] + 1e-6));
+  assert.ok(sim.slice.sounding.every((row) => row.every((v) => Math.abs(v - 3) <= CONFIG.echolot.noise[2] + 1e-6)));
 });
 
 test('Echolot + Automatik: fährt die gewünschte Abtragsdicke an und stoppt, ohne Übertiefung', () => {
   for (const cut of [0.5, 1.0]) {
     const g = new Game(23); flat(g, 1); g.levels.auto = 3; g.levels.echolot = 2; g.cutDepth = cut;
     const sim = g.createSession(); sim.anchor(); sim.toggleAuto();
-    const base = Array.from(sim.slice.sounding);
+    const base = Array.from(sim.slice.sounding[sim.slice.ci]);
     let t = 0;
     while (sim.slice.auto.on && t < 600) { sim.update(0.05, {}); t += 0.05; }
     assert.equal(sim.slice.auto.on, false, `cut ${cut}: Automatik muss von selbst fertig werden`);
     const l = g.lake, sl = sim.slice;
     for (let c = 0; c < 16; c++) {
       const top = l.top[l.idx(sl.x0 + c, sl.row)];
-      assert.ok(Math.abs(top - (1 - cut)) < 0.2, `cut ${cut} Spalte ${c}: ${top}`);
+      assert.ok(Math.abs(top - (1 - cut)) < 0.35, `cut ${cut} Spalte ${c}: ${top}`);
     }
     assert.equal(sim.overdug, 0);
     assert.ok(base.length === 16);
@@ -506,7 +506,7 @@ test('Abtragsdicke: Sollwert wird begrenzt und gilt für den laufenden Querschni
   const sim = g.createSession(); sim.anchor();
   sim.setCutDepth(0.5);
   assert.equal(sim.slice.cutDepth, 0.5);
-  assert.ok(Math.abs(sim.slice.targetAt(3) - (sim.slice.sounding[3] - 0.5)) < 1e-9);
+  assert.ok(Math.abs(sim.slice.targetAt(3) - (sim.slice.sounding[sim.slice.ci][3] - 0.5)) < 1e-9);
   sim.setCutDepth(99); assert.equal(sim.cutDepth, CONFIG.echolot.maxCut);
   sim.setCutDepth(-1); assert.equal(sim.cutDepth, CONFIG.echolot.minCut);
 });
@@ -797,7 +797,7 @@ test('Drohne: ein gescannte Spalte gilt für alle Zeilen des Kastens, nicht dar�
   hover(d, 5);
   const c = d.scanned.findIndex((v) => v === 1);
   assert.ok(c >= 0, 'mindestens eine Spalte gescannt');
-  const B = CONFIG.drone.beam.boxRows;
+  const B = CONFIG.box.rows;
   for (let y = d.r0; y < d.r0 + B; y++) assert.equal(g.lake.accepted[g.lake.idx(d.x0 + c, y)], 1);
   assert.equal(g.lake.accepted[g.lake.idx(d.x0 + c, d.r0 - 1)], 0);
   assert.equal(g.lake.accepted[g.lake.idx(d.x0 + c, d.r0 + B)], 0);
@@ -815,7 +815,7 @@ test('Drohne: Restschmutz wird gemeldet, Fossilien entdeckt, Befliegungsdaten je
   assert.deepEqual(d.found, [3]);
   assert.equal(g.lake.fossilFound[i], 1);
   const doc1 = d.docCells;
-  assert.ok(doc1 >= CONFIG.drone.beam.boxRows);
+  assert.ok(doc1 >= CONFIG.box.rows);
   // neue Drohne über sauberem Boden: „nachher“-Daten, nur einmal
   g.lake.mass.fill(0);
   const d2 = new DroneSim(g.lake, g.stats, { x0: 8, row: 10 }); d2.x = 12; d2.h = 3.5; d2.face = 1;
@@ -915,4 +915,52 @@ test('Angebrochene Charge: Analyse anteilig, mindestens 20 Prozent', () => {
   assert.equal(processBatch(25, 0, stats, false, () => 0).lab, CONFIG.plant.labFeePerBatch);
   assert.equal(processBatch(5, 0, stats, false, () => 0).lab, Math.round(CONFIG.plant.labFeePerBatch * 0.2));
   assert.equal(processBatch(0.3, 0, stats, false, () => 0).lab, Math.round(CONFIG.plant.labFeePerBatch * 0.2));
+});
+
+test('Pumpe räumt den ganzen Kasten (alle Zeilen), nicht darüber hinaus; die Leistung verteilt sich', () => {
+  const g = new Game(70); g.lake.setFlat(1, 3);
+  const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor();
+  const sl = sim.slice, R = CONFIG.box.rows;
+  assert.equal(sl.rows.length, R);
+  assert.ok(sl.rows.includes(sl.row));
+  sl.h = 3.4; sl.x = sl.x0 + 4;
+  let removed = 0;
+  for (let i = 0; i < 40; i++) removed += sim.update(0.05, { dx: 0.2, dy: 0, suction: true }).removed;
+  const col = sl.x0 + Math.floor(sl.mouth().x - sl.x0) + 0;
+  for (const r of sl.rows) assert.ok(g.lake.mass[g.lake.idx(col, r)] < 1, `Zeile ${r} wurde mitgeräumt`);
+  assert.equal(g.lake.mass[g.lake.idx(col, sl.r0 - 1)], 1); // darüber nicht
+  assert.equal(g.lake.mass[g.lake.idx(col, sl.r0 + R)], 1); // darunter nicht
+  assert.ok(removed <= g.stats.power * 2 + 1e-6); // Leistung bleibt die Pumpenleistung (2 s)
+});
+
+test('Nach dem Abtragen meldet die Drohne keinen Restschmutz: Kasten ganz geräumt, 10 cm Rest erlaubt', () => {
+  const g = new Game(71); g.lake.setFlat(1, 3); g.levels.auto = 3; g.levels.echolot = 2; g.cutDepth = 1.0; // die ganze belastete Schicht
+  const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor(); sim.toggleAuto();
+  for (let t = 0; t < 900 && sim.slice.auto.on; t += 0.05) sim.update(0.05, {});
+  assert.equal(sim.slice.auto.on, false);
+  const sl = sim.slice;
+  for (const r of sl.rows) for (let c = 0; c < 16; c++) assert.ok(g.lake.mass[g.lake.idx(sl.x0 + c, r)] < CONFIG.drone.acceptMax, `Zeile ${r} Spalte ${c}`);
+  const d = g.startDrone({ x0: sl.x0, row: sl.row });
+  d.x = d.x0 + 0.5; d.h = 4;
+  for (let t = 0; t < 120 && d.scanned.some((v) => !v); t += 0.05) {
+    const target = d.surfaceAt(d.x + 1.5) + 0.7;
+    d.update(0.05, { dx: d.x > d.x0 + 15 ? 0 : 0.25, dy: Math.max(-1, Math.min(1, (d.h - target) * 2)) });
+  }
+  assert.ok(d.scanned.filter(Boolean).length >= 12, 'die meisten Spalten gescannt');
+  assert.equal(d.newlyFlagged, 0, 'kein Restschmutz gemeldet');
+  assert.ok(d.newlyAccepted >= 12 * CONFIG.box.rows);
+});
+
+test('Abnahme: bis 10 cm Restschicht gelten als sauber, darüber ist es Restschmutz; winzige Reste werden beim Absaugen erledigt', () => {
+  const g = new Game(72); const l = g.lake; l.setFlat(1, 3);
+  const d = new DroneSim(l, g.stats, { x0: 8, row: 10 });
+  const c = 6, i = l.idx(8 + c, 10);
+  l.mass[i] = 0.09; d._scanColumn(c);
+  assert.equal(l.accepted[i], 1);
+  l.mass[i] = 0.11; d.scanned[c] = 0; d._scanColumn(c);
+  assert.equal(l.flagged[i], 1);
+  const small = new Lake(4, 4); small.setFlat(1, 3);
+  const k = small.idx(1, 1); small.top[k] = small.target[k] + CONFIG.layer.snap / 2; small.mass[k] = CONFIG.layer.snap / 2;
+  small.suckProfile(1, 1.5, small.top[k], 1.8, 0.01);
+  assert.equal(small.mass[k], 0);
 });

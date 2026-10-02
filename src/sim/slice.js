@@ -20,6 +20,10 @@ export class SliceSim {
     this.stats = stats;
     this.rng = rng;
     this.row = row;
+    const R = CONFIG.box.rows; // der Kasten deckt R Karten-Zeilen ab; der Querschnitt zeigt die mittlere
+    this.r0 = clamp(row - Math.floor(R / 2), 0, lake.rows - R);
+    this.rows = Array.from({ length: R }, (_, k) => this.r0 + k);
+    this.ci = row - this.r0; // Index der angezeigten Zeile im Kasten
     this.x0 = clamp(Math.round(mapX) - SLICE.cols / 2, 0, lake.cols - SLICE.cols); // linke Zelle des Fensters
     this.x = this.x0 + 0.01; // Saugkopf startet links, absolute Zellenkoordinate
     this.h = Math.min(SLICE.viewH, this.surfaceAt(this.x) + 1.5); // Pumpenhöhe über Grund: schwebt, bis man sie verstellt
@@ -40,9 +44,9 @@ export class SliceSim {
 
   say(kind, text, extra = {}) { this.notes.push({ kind, text, ...extra }); }
 
-  surfaceAt(x) {
+  surfaceAt(x, row = this.row) {
     const c = clamp(Math.floor(x), 0, this.lake.cols - 1);
-    return this.lake.top[this.lake.idx(c, this.row)]; // Oberfläche (Höhe über Felsgrund)
+    return this.lake.top[this.lake.idx(c, row)]; // Oberfläche (Höhe über Felsgrund)
   }
 
   // Einsaugstelle: unten und rechts von der Pumpe (x, h = Pumpenstandort)
@@ -50,28 +54,30 @@ export class SliceSim {
 
   windowRemaining() {
     let t = 0;
-    for (let c = 0; c < SLICE.cols; c++) t += this.lake.mass[this.lake.idx(this.x0 + c, this.row)];
+    for (const r of this.rows) for (let c = 0; c < SLICE.cols; c++) t += this.lake.mass[this.lake.idx(this.x0 + c, r)];
     return t;
   }
 
-  // Echolot: lotet alle Spalten des Fensters aus (mit Messfehler je nach Stufe)
+  // Echolot: lotet alle Spalten und alle Zeilen des Kastens aus (mit Messfehler je nach Stufe)
   sound() {
     const amp = CONFIG.echolot.noise[this.stats.echolot] ?? 0;
-    this.sounding = new Float32Array(SLICE.cols);
-    for (let c = 0; c < SLICE.cols; c++) {
-      const i = this.lake.idx(this.x0 + c, this.row);
-      this.sounding[c] = Math.max(0, this.lake.top[i] + (this.rng() - 0.5) * 2 * amp);
-    }
+    this.sounding = this.rows.map((r) => {
+      const a = new Float32Array(SLICE.cols);
+      for (let c = 0; c < SLICE.cols; c++) a[c] = Math.max(0, this.lake.top[this.lake.idx(this.x0 + c, r)] + (this.rng() - 0.5) * 2 * amp);
+      return a;
+    });
     return true;
   }
 
-  // Zielhöhe der Spalte c (Fensterindex): Messung minus gewünschte Abtragsdicke
-  targetAt(c) { return Math.max(0, this.sounding[c] - this.cutDepth); }
+  // Zielhöhe der Spalte c in Zeile k des Kastens (Standard: angezeigte Zeile): Messung minus gewünschte Abtragsdicke
+  targetAt(c, k = this.ci) { return Math.max(0, this.sounding[k][c] - this.cutDepth); }
 
-  // Spalte c ist fertig, wenn sie auf der Zielhöhe liegt (Spalten ausserhalb der bestellten Fläche zählen nicht)
+  // Spalte c ist fertig, wenn alle Zeilen des Kastens auf der Zielhöhe liegen (Zellen ausserhalb der bestellten Fläche zählen nicht)
   colDone(c) {
-    const i = this.lake.idx(this.x0 + c, this.row);
-    return !this.lake.initial[i] || this.lake.top[i] <= this.targetAt(c) + CONFIG.echolot.doneEps;
+    return this.rows.every((r, k) => {
+      const i = this.lake.idx(this.x0 + c, r);
+      return !this.lake.initial[i] || this.lake.top[i] <= this.targetAt(c, k) + CONFIG.echolot.doneEps;
+    });
   }
 
   allDone() {
@@ -175,8 +181,9 @@ export class SliceSim {
 
     // Fremdstoff an der Einsaugstelle? Wer den Kopf anhebt, fährt drüber weg.
     const m = this.mouth();
-    const di = this.lake.idx(clamp(Math.floor(m.x), 0, this.lake.cols - 1), this.row);
-    const d = this.lake.debris[di];
+    const mcol = clamp(Math.floor(m.x), 0, this.lake.cols - 1);
+    const di = this.rows.map((r) => this.lake.idx(mcol, r)).find((i) => this.lake.debris[i]);
+    const d = di === undefined ? 0 : this.lake.debris[di];
     if (d && m.h <= this.surfaceAt(m.x) + 1.5) {
       this.lake.debris[di] = 0;
       this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : CONFIG.debris.clogSeconds;
@@ -184,7 +191,7 @@ export class SliceSim {
       this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`, { item: DEBRIS[d - 1] });
       return ZERO;
     }
-    const res = this.lake.suckProfile(this.row, m.x, m.h, s.radius, s.power * dt);
+    const res = this.lake.suckSwath(this.rows, this.row, m.x, m.h, s.radius, s.power * dt);
 
     // Zu tief abgetragen? Pro gefahrene Zelle wird zu viel Material weggesaugt: der Boden bricht
     // vor der Pumpe weg und sie kippt nach vorne. Höher ziehen, schneller fahren oder Ballast helfen.

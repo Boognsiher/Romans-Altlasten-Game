@@ -62,13 +62,17 @@ export function drawMap(ctx, lake, sim, jobs = []) {
   const px = sim.x * CELL, py = sim.y * CELL;
   // Ponton: so breit wie der Absaugbereich des Querschnitts
   const x0 = Math.min(Math.max(Math.round(sim.x) - SLICE.cols / 2, 0), cols - SLICE.cols);
-  const bx = x0 * CELL, by = sim.row * CELL, bw = SLICE.cols * CELL;
+  const boxRows = CONFIG.box.rows, r0 = Math.min(Math.max(sim.row - Math.floor(boxRows / 2), 0), rows - boxRows);
+  const bx = x0 * CELL, by = r0 * CELL, bw = SLICE.cols * CELL, bh = boxRows * CELL, cyRow = sim.row * CELL; // Kasten: 16 Spalten x 5 Zeilen
   // Schlauch zum Ufer (oben links)
   ctx.strokeStyle = '#111'; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(px * 0.4, py * 0.1, bx + bw / 2, by + CELL / 2); ctx.stroke();
-  ctx.fillStyle = '#d9dee3cc'; ctx.fillRect(bx, by + 2, bw, CELL - 4);
-  ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.strokeRect(bx, by + 2, bw, CELL - 4);
-  ctx.fillStyle = '#222'; for (let i = 0; i < SLICE.cols; i++) { ctx.beginPath(); ctx.arc(bx + (i + 0.5) * CELL, by + CELL / 2, 3, 0, Math.PI * 2); ctx.fill(); }
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(px * 0.4, py * 0.1, bx + bw / 2, by + 3); ctx.stroke();
+  ctx.fillStyle = 'rgba(217,222,227,.22)'; ctx.fillRect(bx, by, bw, bh); // der Kasten unter dem Ponton
+  ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
+  ctx.fillStyle = '#d9dee3'; ctx.fillRect(bx, by, bw, 8); // Ponton oben am Kasten
+  ctx.fillStyle = '#222'; for (let i = 0; i < SLICE.cols; i++) { ctx.beginPath(); ctx.arc(bx + (i + 0.5) * CELL, by + 4, 2.5, 0, Math.PI * 2); ctx.fill(); }
+  ctx.strokeStyle = '#7fe3ff99'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); // Querschnittszeile
+  ctx.beginPath(); ctx.moveTo(bx, cyRow + CELL / 2); ctx.lineTo(bx + bw, cyRow + CELL / 2); ctx.stroke(); ctx.setLineDash([]);
   turbidityVeil(ctx, sim, cols * CELL, rows * CELL);
 }
 
@@ -109,12 +113,17 @@ export function drawDroneView(ctx, lake, d) {
       ctx.stroke();
     }
   }
-  // Scanstand je Spalte: gescannt = Linie auf der Oberfläche (grün sauber, rot Restschmutz), sonst Fortschrittsbalken
+  // Scanstand je Spalte: Fortschrittsbalken im Licht; Ergebnisse (grün sauber, rot Rest) werden nach der Dunkelheit gezeichnet
+  const marks = [];
   for (let c = 0; c < SLICE.cols; c++) {
-    let dirty = false;
-    for (let y = d.r0; y < d.r0 + CONFIG.drone.beam.boxRows; y++) if (lake.flagged[lake.idx(d.x0 + c, y)]) dirty = true;
+    let dirty = false, rest = 0;
+    for (let y = d.r0; y < d.r0 + CONFIG.box.rows; y++) {
+      const ci = lake.idx(d.x0 + c, y);
+      if (lake.flagged[ci]) dirty = true;
+      rest = Math.max(rest, lake.mass[ci]);
+    }
     const px = xs(c), py = sy(T(c));
-    if (d.scanned[c]) { ctx.strokeStyle = dirty ? '#ff5d4d' : '#5ae682'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(px - Z / 2 + 2, py); ctx.lineTo(px + Z / 2 - 2, py); ctx.stroke(); }
+    if (d.scanned[c]) marks.push({ x: px, y: py, dirty, rest, c });
     else if (d.progress[c] > 0) { ctx.fillStyle = '#7fe3ff'; ctx.fillRect(px - Z / 2 + 4, py + 4, (Z - 8) * d.progress[c], 5); }
   }
   // Kasten: Wände und Ponton oben, Kabel zur Drohne
@@ -136,6 +145,12 @@ export function drawDroneView(ctx, lake, d) {
   glow.addColorStop(0, 'rgba(0,0,0,0.9)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
   k.fillStyle = glow; k.beginPath(); k.arc(cx, cy, Z * 0.9, 0, Math.PI * 2); k.fill();
   ctx.drawImage(darkness, 0, 0);
+  for (const m of marks) { // Scanergebnisse bleiben sichtbar, auch ausserhalb des Lichts
+    ctx.strokeStyle = m.dirty ? '#ff5d4d' : '#5ae682'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(m.x - Z / 2 + 2, m.y); ctx.lineTo(m.x + Z / 2 - 2, m.y); ctx.stroke();
+    ctx.fillStyle = m.dirty ? '#ff9a8d' : '#8af0ab'; ctx.font = 'bold 12px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(m.dirty ? `Rest ${Math.round(m.rest * 100)} cm` : 'sauber', m.x, m.y - 8 - (m.c % 2) * 14); // abwechselnd versetzt, damit Nachbarn nicht überlappen
+  }
+  ctx.textAlign = 'start';
 
   // Lichtschein im Kegel und Drohne (fix in der Bildmitte)
   ctx.fillStyle = 'rgba(255,245,200,.10)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, ang - half, ang + half); ctx.closePath(); ctx.fill();
@@ -196,7 +211,7 @@ export function drawSlice(ctx, lake, sim) {
   // Echolot: gemessenes Profil (punktiert) und Zielhöhe für die gewünschte Abtragsdicke (gestrichelt)
   if (sl.sounding) {
     ctx.beginPath();
-    for (let c = 0; c < SLICE.cols; c++) (c ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c), yOf(sl.sounding[c]));
+    for (let c = 0; c < SLICE.cols; c++) (c ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c), yOf(sl.sounding[sl.ci][c]));
     ctx.strokeStyle = '#7fe3ffaa'; ctx.lineWidth = 2; ctx.setLineDash([2, 5]); ctx.stroke();
     ctx.beginPath();
     for (let c = 0; c < SLICE.cols; c++) (c ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c), yOf(sl.targetAt(c)));

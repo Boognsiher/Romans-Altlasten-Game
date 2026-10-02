@@ -13,7 +13,7 @@ export class DroneSim {
     this.stats = stats;
     this.x0 = win.x0;
     this.row = win.row;
-    this.r0 = clamp(win.row - Math.floor(CONFIG.drone.beam.boxRows / 2), 0, lake.rows - CONFIG.drone.beam.boxRows); // erste Zeile des Kastens
+    this.r0 = clamp(win.row - Math.floor(CONFIG.box.rows / 2), 0, lake.rows - CONFIG.box.rows); // erste Zeile des Kastens (wie beim Querschnitt)
     this.x = this.x0 + 1;
     this.h = SLICE.viewH - 1;
     this.vx = 0; this.vh = 0;
@@ -82,7 +82,7 @@ export class DroneSim {
   _scanColumn(c) {
     const L = this.lake;
     this.scanned[c] = 1; this.progress[c] = 1;
-    for (let y = this.r0; y < this.r0 + CONFIG.drone.beam.boxRows; y++) {
+    for (let y = this.r0; y < this.r0 + CONFIG.box.rows; y++) {
       const i = L.idx(this.x0 + c, y);
       if (L.fossil[i] && !L.fossilFound[i]) { L.fossilFound[i] = 1; this.found.push(L.fossil[i]); }
       if (L.initial[i]) { // Befliegungsdaten: einmal vorher (verschmutzt), einmal nachher (sauber)
