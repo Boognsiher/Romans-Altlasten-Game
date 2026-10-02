@@ -1,11 +1,12 @@
 // Zentrale Spielbalance. Alle Zahlen hier ändern, nichts in der Logik verstecken.
 export const CONFIG = {
   lake: { cols: 48, rows: 30, blobs: 22, toxicBlobs: 7 },
-  shiftSeconds: 120, // eine Schicht = ein Arbeitstag (Fahren + Absaugen teilen sich die Zeit)
+  // Das Spiel läuft in Echtzeit. Gewonnen hat, wer am Ende am meisten Geld hat.
+  daySeconds: 15, // ein Spieltag in Sekunden (150 Tage = 37,5 Minuten)
+  incomePerSec: 250, // CHF pro Sekunde (laufende Finanzierung): 150 Tage ergeben ca. 560k CHF
   startMoney: 40000, // CHF
-  trancheEveryDays: 7,
-  trancheAmount: 25000, // CHF
-  deadlineDays: 150,
+  deadlineDays: 150, // danach saniert eine Fremdfirma den Rest gegen Rechnung
+  deadline: { externalCostPerM3: 380 }, // CHF pro m³ (Abtrag, Entsorgung und Abnahme zum Notfalltarif)
   bankruptcyLimit: -30000, // darunter: Projekt gestoppt
   winCleanFraction: 0.95,
   // Anlage an Land: entwässert den Schlamm, danach wird jede Charge analysiert und nach VVEA eingestuft
@@ -58,8 +59,6 @@ export const CONFIG = {
   },
   // Tauchdrohne: Abnahme des gereinigten Seegrunds
   drone: { fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9 }, // Restschlamm (m³) pro Zelle für eine Abnahme
-  pointsPerUnit: 10,
-  toxicPointsMultiplier: 3,
   turbidityFineThreshold: 0.7,
   turbidityFinePerSecond: 400, // CHF/s über der Schwelle
 };
@@ -71,7 +70,7 @@ export const BASE_STATS = {
   speed: 4.0, // Zellen/s
   curtain: 0, // Schlammschürze: reduziert Trübung (0..1)
   suctionSpeedFactor: 0.55, // (derzeit ungenutzt, Fahren und Saugen sind getrennte Instanzen)
-  plantCapacity: 50, // m³/Tag, die die Anlage verarbeitet
+  plantCapacity: 0.8, // m³/s, die die Anlage verarbeitet
   bufferCapacity: 150, // m³ Puffer vor der Anlage; ist er voll, muss das Saugen pausieren
   dewater: 0.6, // Volumenanteil nach der Entwässerung (kleiner = weniger Entsorgung)
   stability: 0.7, // Standfestigkeit der Pumpe: so viele m Abtragtiefe pro gefahrene Zelle verträgt sie, ohne zu kippen
@@ -117,7 +116,7 @@ export const UPGRADES = {
     name: 'Entwässerungsanlage',
     desc: 'Mehr Durchsatz und Puffer',
     maxLevel: 6, baseCost: 10000, growth: 1.5,
-    apply: (s, lvl) => { s.plantCapacity += lvl * 25; s.bufferCapacity += lvl * 50; },
+    apply: (s, lvl) => { s.plantCapacity += lvl * 0.4; s.bufferCapacity += lvl * 50; },
   },
   dewater: {
     group: 'plant',

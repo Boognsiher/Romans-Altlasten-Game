@@ -30,3 +30,5 @@ button#btn-drone, button#btn-wait { width:100%; margin-top:6px; }
 #stage { position:sticky; top:8px; align-self:start; }
 #toast .tip { color:var(--bad); }
 #cut-box { display:flex; align-items:center; gap:6px; background:#000a; padding:4px 10px; border-radius:6px; } #cut-box input { width:120px; }
+#hud small { color:var(--muted); } button#btn-pause { width:100%; margin-top:6px; }
+#cut-box[hidden], #shift-actions button[hidden] { display:none; }

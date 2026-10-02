@@ -17,27 +17,12 @@ export function pickClass(rng, probs) {
   return 'C';
 }
 
-// Ein Tag in der Anlage. stock = { normal, toxic } in m³ (Rohschlamm im Puffer).
-// Gibt das neue Lager, die Chargen und die Kosten zurück; verändert stock nicht.
-export function runPlantDay(stock, stats, overclock, rng) {
+// Eine Charge analysieren und entsorgen: Klasse per Los (abhängig vom Altlasten-Anteil und vom Übertakten),
+// Kosten = entwässertes Volumen * Klassenpreis, dazu die Analysegebühr.
+export function processBatch(vol, toxicShare, stats, overclock, rng) {
   const P = CONFIG.plant;
-  const total = stock.normal + stock.toxic;
-  const capacity = stats.plantCapacity * (overclock ? P.overclockFactor : 1);
-  const take = Math.min(total, capacity);
-  const out = { processed: take, batches: [], cost: 0, lab: 0, stock: { ...stock } };
-  if (take <= 0) return out;
-
-  const toxicShare = stock.toxic / total;
-  const probs = classProbabilities(toxicShare, overclock);
-  for (let left = take; left > 1e-9; left -= P.batchSize) {
-    const vol = Math.min(P.batchSize, left);
-    const disposalVol = vol * stats.dewater;
-    const cls = pickClass(rng, probs);
-    const cost = Math.round((disposalVol * P.classes[cls].price) / 10) * 10;
-    out.batches.push({ vol, disposalVol, cls, cost });
-    out.cost += cost + P.labFeePerBatch;
-    out.lab += P.labFeePerBatch;
-  }
-  out.stock = { normal: stock.normal - take * (1 - toxicShare), toxic: stock.toxic - take * toxicShare };
-  return out;
+  const disposalVol = vol * stats.dewater;
+  const cls = pickClass(rng, classProbabilities(toxicShare, overclock));
+  const cost = Math.round((disposalVol * P.classes[cls].price) / 10) * 10;
+  return { vol, disposalVol, cls, cost, lab: P.labFeePerBatch };
 }

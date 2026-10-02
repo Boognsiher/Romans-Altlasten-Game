@@ -1,43 +1,50 @@
 import { CONFIG } from '../config.js';
 import { SliceSim } from './slice.js';
 
-// Eine Schicht mit zwei Instanzen und gemeinsamer Uhr:
-//  - mode 'map':   Draufsicht, Ponton positionieren (Zeit läuft beim Fahren)
+// Baggersitzung mit zwei Instanzen, die in Echtzeit laufen (die Uhr gehört dem Game):
+//  - mode 'map':   Draufsicht, Ponton positionieren
 //  - mode 'slice': Querschnitt an der Ankerposition, hier wird abgesaugt
+// update() liefert, was in diesem Schritt passiert ist (Delta); Game.collect() verbucht es.
 // Reine Simulation ohne Rendering/DOM (deshalb testbar).
 export class DredgeSim {
-  constructor(lake, stats, shiftSeconds = CONFIG.shiftSeconds, bufferRoom = Infinity, rng = Math.random) {
+  constructor(lake, stats, rng = Math.random) {
     this.lake = lake;
     this.stats = stats;
     this.rng = rng;
     this.notes = []; // Meldungen aus dem Querschnitt (Verstopfung, Automatik ...)
-    this.clogs = 0;
     this.cutDepth = CONFIG.echolot.defaultCut; // gewünschte Abtragsdicke der Automatik (m)
-    this.tips = 0; // wie oft die Pumpe umgekippt ist
-    this.repairs = 0; // CHF dafür
-    this.bufferRoom = bufferRoom; // so viel m³ passen noch in den Puffer vor der Anlage
-    this.timeLeft = shiftSeconds;
+    this.bufferRoom = Infinity; // so viel m³ passen noch in den Puffer vor der Anlage (setzt das Game)
     this.mode = 'map';
     this.slice = null;
     this.x = 1; // Ponton-Position in Zellenkoordinaten
     this.y = 1;
-    this.removed = 0; // m³ gesamt in dieser Schicht
-    this.toxicRemoved = 0;
-    this.overdug = 0; // m³ unter der Sollsohle abgetragen (zu tief)
     this.turbidity = 0; // 0..1
-    this.fines = 0; // CHF
-    this.over = false;
+    // Summen seit Spielbeginn (nur Anzeige)
+    this.removed = 0; this.toxicRemoved = 0; this.overdug = 0; this.clogs = 0; this.tips = 0;
   }
 
   get row() { return clamp(Math.floor(this.y), 0, this.lake.rows - 1); }
-  get bufferFull() { return this.removed >= this.bufferRoom; }
+  get bufferFull() { return this.bufferRoom <= 1e-6; }
   get suctioning() { return this.mode === 'slice' && this.slice.suctioning; }
+
+  setStats(stats) {
+    this.stats = stats;
+    if (this.slice) this.slice.stats = stats;
+  }
 
   // Anker werfen: Querschnitt an der aktuellen Position öffnen
   anchor() {
-    if (this.over || this.mode !== 'map') return false;
+    if (this.mode !== 'map') return false;
     this.slice = new SliceSim(this.lake, this.stats, this.x, this.row, this.rng, this.cutDepth);
     this.mode = 'slice';
+    return true;
+  }
+
+  // Anker lichten: zurück zur Karte
+  leave() {
+    if (this.mode !== 'slice') return false;
+    this.slice = null;
+    this.mode = 'map';
     return true;
   }
 
@@ -49,18 +56,11 @@ export class DredgeSim {
   toggleAuto() { return this.mode === 'slice' && this.slice.toggleAuto(); }
   fixAuto() { return this.mode === 'slice' && this.slice.fixAuto(); }
 
-  // Anker lichten: zurück zur Karte
-  leave() {
-    if (this.mode !== 'slice') return false;
-    this.slice = null;
-    this.mode = 'map';
-    return true;
-  }
-
   // input: { dx, dy in -1..1, suction: bool }
+  // Gibt zurück, was in diesem Schritt passiert ist: { removed, toxicRemoved, overdug, fines, repairs, tips, clogs }
   update(dt, input) {
-    if (this.over) return;
     const s = this.stats;
+    const d = { removed: 0, toxicRemoved: 0, overdug: 0, fines: 0, repairs: 0, tips: 0, clogs: 0 };
 
     if (this.mode === 'map') {
       let dx = input.dx || 0, dy = input.dy || 0;
@@ -71,10 +71,12 @@ export class DredgeSim {
     } else {
       this.slice.blocked = this.bufferFull; // Puffer voll: auch die Automatik darf nicht saugen
       const r = this.slice.update(dt, input);
-      for (const n of this.slice.notes.splice(0)) { this.notes.push(n); if (n.kind === 'clog') this.clogs++; if (n.kind === 'tip') { this.tips++; this.repairs += CONFIG.pump.repairCost; } }
-      this.removed += r.removed;
-      this.toxicRemoved += r.toxicRemoved;
-      this.overdug += r.overdug;
+      for (const n of this.slice.notes.splice(0)) {
+        this.notes.push(n);
+        if (n.kind === 'clog') d.clogs++;
+        if (n.kind === 'tip') { d.tips++; d.repairs += CONFIG.pump.repairCost; }
+      }
+      d.removed = r.removed; d.toxicRemoved = r.toxicRemoved; d.overdug = r.overdug;
       if (this.slice.suctioning) {
         // Aufgewirbelter Schlamm: mehr Leistung, Bewegung und Altlasten -> mehr Trübung
         const boost = (this.slice.moving ? 1.4 : 1) * (r.toxicRemoved > 0 ? 1.5 : 1);
@@ -83,15 +85,11 @@ export class DredgeSim {
     }
 
     this.turbidity = clamp(this.turbidity - 0.04 * dt, 0, 1);
-    if (this.turbidity > CONFIG.turbidityFineThreshold) this.fines += CONFIG.turbidityFinePerSecond * dt;
+    if (this.turbidity > CONFIG.turbidityFineThreshold) d.fines = CONFIG.turbidityFinePerSecond * dt;
 
-    this.timeLeft -= dt;
-    if (this.timeLeft <= 0) { this.timeLeft = 0; this.over = true; }
-  }
-
-  // Ergebnis der Schicht: Abrechnung macht Game.
-  result() {
-    return { removed: this.removed, toxicRemoved: this.toxicRemoved, overdug: this.overdug, fines: Math.round(this.fines), clogs: this.clogs, tips: this.tips, repairs: this.repairs };
+    this.removed += d.removed; this.toxicRemoved += d.toxicRemoved; this.overdug += d.overdug;
+    this.clogs += d.clogs; this.tips += d.tips;
+    return d;
   }
 }
 

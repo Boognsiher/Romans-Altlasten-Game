@@ -8,7 +8,7 @@ import { CONFIG } from '../src/config.js';
 import { computeStats } from '../src/sim/stats.js';
 import { Chain } from '../src/ui/chain.js';
 import { DroneSim } from '../src/sim/drone.js';
-import { classProbabilities, runPlantDay } from '../src/sim/plant.js';
+import { classProbabilities, processBatch } from '../src/sim/plant.js';
 
 test('rng ist deterministisch', () => {
   assert.equal(createRng(5)(), createRng(5)());
@@ -28,17 +28,19 @@ test('Seegrund lässt sich komplett leersaugen', () => {
   assert.ok(lake.cleanFraction() > 0.999);
 });
 
-test('Schicht: Saugen entfernt Material, Zeit läuft ab', () => {
+test('Saugen entfernt Material und liefert die Änderung als Delta', () => {
   const g = new Game(3);
-  const sim = g.startShift();
+  const sim = g.createSession();
   sim.x = 24; sim.y = 15; sim.anchor();
-  while (!sim.over) sim.update(0.1, { dx: Math.sin(sim.timeLeft), dy: 0, suction: true });
+  let sum = 0;
+  for (let i = 0; i < 1200; i++) sum += sim.update(0.1, { dx: Math.sin(i * 0.1), dy: 0, suction: true }).removed;
   assert.ok(sim.removed > 0);
+  assert.ok(Math.abs(sum - sim.removed) < 1e-6);
 });
 
 test('Karte saugt nicht, Querschnitt schon', () => {
   const g = new Game(3);
-  const sim = g.startShift();
+  const sim = g.createSession();
   sim.update(1, { dx: 0, dy: 0, suction: true });
   assert.equal(sim.removed, 0);
   g.lake.setFlat(5); sim.anchor(); sim.slice.h = 5;
@@ -48,13 +50,12 @@ test('Karte saugt nicht, Querschnitt schon', () => {
   assert.ok(sim.removed > 0);
 });
 
-test('Anker nur in der Karte, Lichten nur im Querschnitt, Uhr läuft in beiden', () => {
-  const sim = new Game(3).startShift();
+test('Anker nur in der Karte, Lichten nur im Querschnitt', () => {
+  const sim = new Game(3).createSession();
   assert.equal(sim.leave(), false);
   assert.equal(sim.anchor(), true);
   assert.equal(sim.anchor(), false);
-  const t = sim.timeLeft; sim.update(1, {});
-  assert.equal(sim.timeLeft, t - 1);
+  sim.update(1, {});
   assert.equal(sim.leave(), true);
   assert.equal(sim.mode, 'map');
 });
@@ -62,7 +63,7 @@ test('Anker nur in der Karte, Lichten nur im Querschnitt, Uhr läuft in beiden',
 test('Querschnitt: Saugkopf dringt nicht in den Grund, Fenster liegt im See', () => {
   const g = new Game(3);
   g.lake.setFlat(4);
-  const sim = g.startShift(); sim.x = 0; sim.anchor();
+  const sim = g.createSession(); sim.x = 0; sim.anchor();
   assert.equal(sim.slice.x0, 0);
   for (let i = 0; i < 100; i++) sim.update(0.1, { dx: 0, dy: 1, suction: false });
   assert.ok(sim.slice.h >= 4 - 1e-9);
@@ -78,27 +79,36 @@ test('Querschnitt: Saugkopf in der Höhe saugt nichts', () => {
   assert.ok(Math.abs(r.removed - 3) < 1e-6);
 });
 
-test('Schicht: Material geht in den Puffer, Tag wird weitergeschaltet', () => {
-  const g = new Game(4);
-  g.rng = Object.assign(() => 0.5, { chance: () => false, range: (a) => a });
-  const sim = new DredgeSim(g.lake, computeStats(), 1);
-  sim.removed = 10; sim.toxicRemoved = 4;
-  g.finishShift(sim);
-  assert.equal(g.day, 2);
-  // Anlage hat am neuen Tag bereits verarbeitet (Kapazität 50 > 10) -> Puffer leer, Entsorgung bezahlt
-  assert.ok(g.stockTotal < 1e-9);
-  assert.ok(g.money < CONFIG.startMoney);
-  assert.equal(g.totals.classes.B + g.totals.classes.E + g.totals.classes.C, 1);
+const quiet = (g) => { g.rng = Object.assign(() => 0.5, { chance: () => false, range: (a) => a }); return g; }; // keine Ereignisse, Typ E
+
+test('Material geht in den Puffer, die Anlage verarbeitet es laufend und bezahlt jede Charge', () => {
+  const g = quiet(new Game(4));
+  g.collect({ removed: 60, toxicRemoved: 20, overdug: 0, fines: 0, repairs: 0, tips: 0, clogs: 0 });
+  assert.equal(g.stockTotal, 60);
+  assert.ok(Math.abs(g.stock.toxic - 20) < 1e-9);
+  const money = g.money;
+  for (let t = 0; t < 30; t += 0.1) g.update(0.1);
+  // 30 s * 0,8 m³/s = 24 m³ verarbeitet, noch keine volle Charge (25 m³)
+  assert.ok(Math.abs(g.stockTotal - 36) < 1e-6);
+  assert.equal(g.totals.classes.B + g.totals.classes.E + g.totals.classes.C, 0);
+  for (let t = 0; t < 10; t += 0.1) g.update(0.1);
+  assert.equal(g.totals.classes.E, 1); // Los = 0.5 -> Typ E
+  assert.ok(g.totals.disposalPaid > CONFIG.plant.labFeePerBatch);
+  assert.ok(g.money < money + 40 * CONFIG.incomePerSec); // Entsorgung und Analyse sind abgebucht
 });
 
 test('Puffer voll: Pumpe pausiert', () => {
   const g = new Game(4);
   g.lake.setFlat(5);
-  const sim = new DredgeSim(g.lake, computeStats(), 100, 3);
+  const sim = new DredgeSim(g.lake, computeStats());
   sim.anchor(); sim.slice.h = 5;
-  for (let i = 0; i < 100; i++) sim.update(0.1, { dx: (i % 40) < 20 ? 1 : -1, dy: 0, suction: true });
+  const room = 3; let used = 0;
+  for (let i = 0; i < 100; i++) {
+    sim.bufferRoom = Math.max(0, room - used);
+    used += sim.update(0.1, { dx: (i % 40) < 20 ? 1 : -1, dy: 0, suction: true }).removed;
+  }
   assert.ok(sim.bufferFull);
-  assert.ok(sim.removed < 3 + computeStats().power * 0.1 + 1e-6);
+  assert.ok(used < room + computeStats().power * 0.1 + 1e-6);
 });
 
 test('Klassenwahrscheinlichkeiten: Summe 1, Altlasten und Übertakten erhöhen C', () => {
@@ -107,23 +117,25 @@ test('Klassenwahrscheinlichkeiten: Summe 1, Altlasten und Übertakten erhöhen C
   assert.ok(b.C > a.C && c.C > a.C);
 });
 
-test('Anlage: Kapazität begrenzt, Rest bleibt im Lager, Masse stimmt', () => {
+test('Charge: Klasse per Los, Kosten = entwässertes Volumen * Preis, Analysegebühr extra', () => {
   const stats = computeStats();
-  const rng = createRng(1);
-  const res = runPlantDay({ normal: 90, toxic: 10 }, stats, false, rng);
-  assert.equal(res.processed, stats.plantCapacity);
-  assert.ok(Math.abs(res.stock.normal + res.stock.toxic - 50) < 1e-6);
-  assert.equal(res.batches.length, 2);
-  const oc = runPlantDay({ normal: 90, toxic: 10 }, stats, true, createRng(1));
-  assert.equal(oc.processed, stats.plantCapacity * CONFIG.plant.overclockFactor);
+  const b = processBatch(25, 0, stats, false, () => 0.99); // Los ganz oben -> Typ C
+  assert.equal(b.cls, 'C');
+  assert.equal(b.disposalVol, 25 * stats.dewater);
+  assert.equal(b.cost, Math.round(25 * stats.dewater * CONFIG.plant.classes.C.price / 10) * 10);
+  assert.equal(b.lab, CONFIG.plant.labFeePerBatch);
+  assert.equal(processBatch(25, 0, stats, false, () => 0).cls, 'B');
 });
 
-test('Tranche alle N Tage', () => {
-  const g = new Game(5);
+test('Einkommen pro Sekunde, Spielzeit und Tageswechsel', () => {
+  const g = quiet(new Game(5));
   g.money = 0;
-  g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a }); // keine Zufallsereignisse
-  g.advanceDays(CONFIG.trancheEveryDays);
-  assert.equal(g.money, CONFIG.trancheAmount);
+  for (let i = 0; i < 100; i++) g.update(0.1); // 10 s
+  assert.ok(Math.abs(g.money - 10 * CONFIG.incomePerSec) < 1e-6);
+  assert.ok(Math.abs(g.time - 10) < 1e-9);
+  assert.equal(g.day, 1);
+  for (let i = 0; i < Math.round((CONFIG.daySeconds - 10) * 10) + 3; i++) g.update(0.1);
+  assert.equal(g.day, 2);
 });
 
 test('Upgrade kaufen: Geld sinkt, Stufe steigt, Werte wachsen', () => {
@@ -135,17 +147,52 @@ test('Upgrade kaufen: Geld sinkt, Stufe steigt, Werte wachsen', () => {
 });
 
 test('Bankrott beendet das Spiel', () => {
-  const g = new Game(7);
-  g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a });
-  g.money = CONFIG.bankruptcyLimit - 1;
-  g.advanceDays(1);
-  assert.equal(g.status, 'lost');
+  const g = quiet(new Game(7));
+  g.money = CONFIG.bankruptcyLimit - 10000;
+  for (let t = 0; t < 1; t += 0.1) g.update(0.1);
+  assert.equal(g.status, 'ended');
+  assert.equal(g.end.reason, 'bankrupt');
+});
+
+test('Frist: nach 150 Tagen ist Schluss, eine Fremdfirma saniert den Rest, Endstand = Geld', () => {
+  const g = quiet(new Game(8));
+  g.money = 1e7; // reicht sicher
+  const remaining = g.lake.remaining();
+  g.time = g.totalSeconds - 0.2; g.day = CONFIG.deadlineDays;
+  for (let t = 0; t < 1; t += 0.1) g.update(0.1);
+  assert.equal(g.status, 'ended');
+  assert.equal(g.end.reason, 'deadline');
+  assert.equal(g.end.external, Math.round(remaining * CONFIG.deadline.externalCostPerM3));
+  assert.equal(g.end.finalMoney, Math.round(g.money));
+  assert.ok(g.end.finalMoney < 1e7 + 2 * CONFIG.incomePerSec * 2);
+  const frozen = g.money; g.update(5); assert.equal(g.money, frozen); // danach läuft nichts mehr
+});
+
+test('Frist: reicht das Geld nicht, ist der Endstand negativ', () => {
+  const g = quiet(new Game(9));
+  g.money = 0;
+  g.time = g.totalSeconds - 0.1; g.day = CONFIG.deadlineDays;
+  for (let t = 0; t < 1; t += 0.1) g.update(0.1);
+  assert.equal(g.end.reason, 'deadline');
+  assert.ok(g.end.finalMoney < 0);
+});
+
+test('Früh fertig: Restmaterial wird entsorgt, Restfinanzierung gutgeschrieben', () => {
+  const g = quiet(new Game(10));
+  g.lake.mass.fill(0); g.lake.accepted.fill(1);
+  g.collect({ removed: 30, toxicRemoved: 0, overdug: 0, fines: 0, repairs: 0, tips: 0, clogs: 0 });
+  g.update(0.6);
+  assert.equal(g.status, 'ended');
+  assert.equal(g.end.reason, 'early');
+  assert.equal(g.end.bonus, Math.round((g.totalSeconds - 0.6) * CONFIG.incomePerSec));
+  assert.ok(g.stockTotal === 0 && g.batch.vol === 0); // alles entsorgt
+  assert.equal(g.totals.classes.B + g.totals.classes.E + g.totals.classes.C, 2); // 30 m³ = Charge à 25 + Rest 5
 });
 
 test('Querschnitt: Saugen nur in Arbeitsrichtung, nur eine Achse, Rückweg ist schneller', () => {
   const g = new Game(3);
   g.lake.setFlat(5);
-  const sim = g.startShift(); sim.anchor();
+  const sim = g.createSession(); sim.anchor();
   const sl = sim.slice; sl.h = 5;
   sl.x = sl.x0 + 8; sl.h = 5;
   const x1 = sl.x, rBack = sl.update(0.2, { dx: -1, dy: 0, suction: true });
@@ -173,7 +220,7 @@ test('Harte Schicht: gleiche Leistung entfernt weniger, mehrere Überfahrten nö
 
 test('Fremdstoff verstopft die Pumpe; Anheben des Kopfes vermeidet es', () => {
   const g = new Game(8); const lake = flat(g);
-  const sim = g.startShift(); sim.y = 5; sim.anchor();
+  const sim = g.createSession(); sim.y = 5; sim.anchor();
   const sl = sim.slice, col = sl.x0 + 3;
   lake.debris[lake.idx(col, sl.row)] = 1;
   sl.x = sl.x0 + 2; sl.h = 9; // hoch über dem Fremdstoff
@@ -189,10 +236,10 @@ test('Fremdstoff verstopft die Pumpe; Anheben des Kopfes vermeidet es', () => {
 test('Automatik: Stufe 0 gibt es nicht, Stufe 2 fährt hin und her und saugt selbst', () => {
   const g = new Game(9); flat(g);
   g.levels.auto = 0;
-  let sim = g.startShift(); sim.anchor();
+  let sim = g.createSession(); sim.anchor();
   assert.equal(sim.toggleAuto(), false);
   g.levels.auto = 2;
-  sim = g.startShift(); sim.anchor();
+  sim = g.createSession(); sim.anchor();
   assert.equal(sim.toggleAuto(), true);
   const x0 = sim.slice.x0;
   for (let i = 0; i < 600; i++) sim.update(0.1, { dx: 0, dy: 0, suction: false });
@@ -202,7 +249,7 @@ test('Automatik: Stufe 0 gibt es nicht, Stufe 2 fährt hin und her und saugt sel
 
 test('Automatik Stufe 1 macht Fehler, Reset behebt sie, manuelles Steuern übernimmt', () => {
   const g = new Game(10); flat(g); g.levels.auto = 1;
-  const sim = g.startShift();
+  const sim = g.createSession();
   sim.rng = () => 0; sim.anchor(); sim.slice.rng = () => 0; // erzwingt Fehler
   sim.toggleAuto();
   sim.update(0.1, {});
@@ -215,7 +262,7 @@ test('Automatik Stufe 1 macht Fehler, Reset behebt sie, manuelles Steuern übern
 
 test('Automatik darf bei vollem Puffer nicht saugen', () => {
   const g = new Game(11); flat(g); g.levels.auto = 3;
-  const sim = new DredgeSim(g.lake, g.stats, 100, 0);
+  const sim = new DredgeSim(g.lake, g.stats); sim.bufferRoom = 0;
   sim.anchor(); sim.toggleAuto();
   for (let i = 0; i < 50; i++) sim.update(0.1, {});
   assert.equal(sim.removed, 0);
@@ -235,19 +282,20 @@ test('Drohne: saubere Zellen werden abgenommen, Restschmutz gemeldet', () => {
 });
 
 test('Sieg braucht Sauberkeit UND Abnahme', () => {
-  const g = new Game(13); g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a });
+  const g = quiet(new Game(13));
   g.lake.mass.fill(0);
   g.checkEnd();
   assert.equal(g.status, 'playing'); // sauber, aber nicht abgenommen
   g.lake.accepted.fill(1);
   g.checkEnd();
-  assert.equal(g.status, 'won');
+  assert.equal(g.status, 'ended');
+  assert.equal(g.end.reason, 'early');
 });
 
 test('Trübungsschutz senkt die Trübung', () => {
   const run = (lvl) => {
     const g = new Game(14); flat(g); g.levels.curtain = lvl;
-    const sim = g.startShift(); sim.anchor(); sim.slice.h = 5; sweep(sim, 2);
+    const sim = g.createSession(); sim.anchor(); sim.slice.h = 5; sweep(sim, 2);
     return sim.turbidity;
   };
   assert.ok(run(4) < run(0));
@@ -255,7 +303,7 @@ test('Trübungsschutz senkt die Trübung', () => {
 
 test('Einsaugstelle liegt unten rechts der Pumpe; links der Pumpe wird nichts gesaugt', () => {
   const g = new Game(15); const lake = flat(g, 0);
-  const sim = g.startShift(); sim.anchor();
+  const sim = g.createSession(); sim.anchor();
   const sl = sim.slice, P = CONFIG.pump;
   sl.x = sl.x0 + 10; sl.h = 4;
   const m = sl.mouth();
@@ -274,33 +322,35 @@ test('Einsaugstelle liegt unten rechts der Pumpe; links der Pumpe wird nichts ge
 
 test('Zu tiefes Abtragen: Schieflage steigt, Pumpe kippt um und kostet Bergung', () => {
   const g = new Game(16); flat(g, 8);
-  const sim = g.startShift(); sim.anchor();
+  const sim = g.createSession(); sim.anchor();
   sim.stats.power = 30; // brutale Pumpe
   sim.slice.h = 8;
   let max = 0;
   for (let t = 0; t < 4 && sim.tips === 0; t += 0.05) { sim.update(0.05, { dx: 1, dy: 0, suction: true }); max = Math.max(max, sim.slice.tilt); }
   assert.ok(max > 0.3);
   assert.equal(sim.tips, 1);
-  assert.equal(sim.repairs, CONFIG.pump.repairCost);
   const before = sim.removed;
-  sim.update(0.5, { dx: 1, dy: 0, suction: true });
+  const d = sim.update(0.5, { dx: 1, dy: 0, suction: true });
   assert.equal(sim.removed, before); // liegt auf der Seite
-  const money = g.money; sim.timeLeft = 0; sim.over = true;
-  g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a });
-  g.finishShift(sim);
-  assert.ok(g.money <= money - CONFIG.pump.repairCost);
+  assert.equal(d.removed, 0);
+  // Bergungskosten kommen im Delta des Kippens und werden verbucht
+  const g2 = quiet(new Game(16));
+  const money = g2.money;
+  g2.collect({ removed: 0, toxicRemoved: 0, overdug: 0, fines: 0, repairs: CONFIG.pump.repairCost, tips: 1, clogs: 0 });
+  assert.equal(g2.money, money - CONFIG.pump.repairCost);
+  assert.equal(g2.totals.repairsPaid, CONFIG.pump.repairCost);
 });
 
 test('Sanftes Abtragen mit der Standardpumpe kippt nicht', () => {
   const g = new Game(17); flat(g, 5);
-  const sim = g.startShift(); sim.anchor(); sim.slice.h = 5;
+  const sim = g.createSession(); sim.anchor(); sim.slice.h = 5;
   for (let p = 0; p < 4; p++) { sweep(sim, 6, 1); sweep(sim, 6, -1); }
   assert.equal(sim.tips, 0);
 });
 
 test('Automatik ab Stufe 2 zieht die Pumpe bei Schieflage hoch', () => {
   const g = new Game(18); flat(g, 8); g.levels.auto = 2;
-  const sim = g.startShift(); sim.anchor(); sim.stats.power = 12;
+  const sim = g.createSession(); sim.anchor(); sim.stats.power = 12;
   sim.toggleAuto();
   for (let i = 0; i < 400; i++) sim.update(0.05, {});
   assert.equal(sim.tips, 0);
@@ -339,17 +389,23 @@ test('Übertiefung: unter der Sollsohle geht es langsamer, wird gezählt und kos
   assert.ok(b < a * 0.5);
 });
 
-test('Abrechnung: Übertiefung kostet extra, gibt keine Punkte, geht trotzdem in den Puffer', () => {
-  const g = new Game(19);
-  g.rng = Object.assign(() => 0.999, { chance: () => false, range: (a) => a });
-  const sim = new DredgeSim(g.lake, computeStats(), 1);
-  sim.removed = 20; sim.overdug = 10; sim.toxicRemoved = 0;
+test('Übertiefung: kostet extra und geht trotzdem in den Puffer', () => {
+  const g = quiet(new Game(19));
   const money = g.money;
-  const r = g.finishShift(sim);
-  assert.equal(r.points, 10 * CONFIG.pointsPerUnit); // nur 10 m³ belastet
-  assert.equal(r.overCost, 10 * CONFIG.layer.overdigCostPerM3);
-  assert.ok(g.money <= money - r.overCost);
+  g.collect({ removed: 20, toxicRemoved: 0, overdug: 10, fines: 0, repairs: 0, tips: 0, clogs: 0 });
+  assert.equal(g.stockTotal, 20); // zu viel abgetragener Boden muss auch entsorgt werden
+  assert.equal(g.money, money - 10 * CONFIG.layer.overdigCostPerM3);
   assert.equal(g.totals.overdug, 10);
+  assert.equal(g.totals.overdigPaid, 10 * CONFIG.layer.overdigCostPerM3);
+});
+
+test('Trübungs-Bussen laufen pro Sekunde über der Schwelle und werden verbucht', () => {
+  const g = quiet(new Game(25)); flat(g, 5);
+  const sim = g.createSession(); sim.anchor(); sim.slice.h = 5; sim.turbidity = 1;
+  const d = sim.update(0.5, { dx: 0, dy: 0, suction: false });
+  assert.ok(Math.abs(d.fines - 0.5 * CONFIG.turbidityFinePerSecond) < 1e-9);
+  const money = g.money; g.collect(d);
+  assert.equal(g.money, money - d.fines);
 });
 
 test('Saubere Zellen ausserhalb der bestellten Fläche werden nicht angesaugt, kein Fehlalarm am Start', () => {
@@ -361,7 +417,7 @@ test('Saubere Zellen ausserhalb der bestellten Fläche werden nicht angesaugt, k
   assert.equal(r.overdug, 0);
   // Standardpumpe, erste Sekunden über frischem Seegrund: keine Übertiefung
   for (const seed of [1, 2, 3, 4, 5]) {
-    const g = new Game(seed); const sim = g.startShift();
+    const g = new Game(seed); const sim = g.createSession();
     let by = 0, best = 0;
     for (let y = 0; y < g.lake.rows; y++) { let t = 0; for (let x = 0; x < g.lake.cols; x++) t += g.lake.mass[g.lake.idx(x, y)]; if (t > best) { best = t; by = y; } }
     sim.x = 24; sim.y = by + 0.5; sim.anchor();
@@ -391,7 +447,7 @@ test('Kette: Enden fest, Glieder nicht gedehnt, pendelt beim Fahren nach und kom
 
 test('Pumpe schwebt: Höhe ändert sich nur durch die Kette, nie in den Grund', () => {
   const g = new Game(20); flat(g, 3);
-  const sim = g.startShift(); sim.anchor(); const sl = sim.slice;
+  const sim = g.createSession(); sim.anchor(); const sl = sim.slice;
   assert.ok(sl.h > 3); // startet über dem Grund
   const h0 = sl.h;
   for (let i = 0; i < 60; i++) sim.update(0.1, { dx: i % 20 < 10 ? 1 : -1, dy: 0, suction: false });
@@ -404,7 +460,7 @@ test('Pumpe schwebt: Höhe ändert sich nur durch die Kette, nie in den Grund', 
 
 test('Automatik hält die Pumpe selbst an der Oberfläche', () => {
   const g = new Game(21); flat(g, 3); g.levels.auto = 2;
-  const sim = g.startShift(); sim.anchor(); sim.toggleAuto();
+  const sim = g.createSession(); sim.anchor(); sim.toggleAuto();
   for (let i = 0; i < 30; i++) sim.update(0.1, {});
   assert.ok(sim.slice.h - 3 < 0.2);
   assert.ok(sim.removed > 0);
@@ -412,21 +468,21 @@ test('Automatik hält die Pumpe selbst an der Oberfläche', () => {
 
 test('Echolot: misst beim Ankern (mit Messfehler je Stufe), ohne Echolot kein Lot', () => {
   const g = new Game(22); flat(g, 3);
-  let sim = g.startShift(); sim.anchor();
+  let sim = g.createSession(); sim.anchor();
   assert.equal(sim.slice.sounding, null);
   g.levels.echolot = 1;
-  sim = g.startShift(); sim.anchor();
+  sim = g.createSession(); sim.anchor();
   const amp = CONFIG.echolot.noise[1];
   assert.ok(sim.slice.sounding.every((v) => Math.abs(v - 3) <= amp + 1e-6));
   g.levels.echolot = 2;
-  sim = g.startShift(); sim.anchor();
+  sim = g.createSession(); sim.anchor();
   assert.ok(sim.slice.sounding.every((v) => Math.abs(v - 3) <= CONFIG.echolot.noise[2] + 1e-6));
 });
 
 test('Echolot + Automatik: fährt die gewünschte Abtragsdicke an und stoppt, ohne Übertiefung', () => {
   for (const cut of [0.5, 1.0]) {
     const g = new Game(23); flat(g, 1); g.levels.auto = 3; g.levels.echolot = 2; g.cutDepth = cut;
-    const sim = g.startShift(); sim.anchor(); sim.toggleAuto();
+    const sim = g.createSession(); sim.anchor(); sim.toggleAuto();
     const base = Array.from(sim.slice.sounding);
     let t = 0;
     while (sim.slice.auto.on && t < 600) { sim.update(0.05, {}); t += 0.05; }
@@ -443,7 +499,7 @@ test('Echolot + Automatik: fährt die gewünschte Abtragsdicke an und stoppt, oh
 
 test('Abtragsdicke: Sollwert wird begrenzt und gilt für den laufenden Querschnitt', () => {
   const g = new Game(24); flat(g, 1); g.levels.echolot = 1;
-  const sim = g.startShift(); sim.anchor();
+  const sim = g.createSession(); sim.anchor();
   sim.setCutDepth(0.5);
   assert.equal(sim.slice.cutDepth, 0.5);
   assert.ok(Math.abs(sim.slice.targetAt(3) - (sim.slice.sounding[3] - 0.5)) < 1e-9);

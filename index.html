@@ -10,11 +10,11 @@
   <header>
     <h1>Seesanierung Uetikon</h1>
     <div id="hud">
-      <span>Tag <b id="h-day"></b></span>
-      <span>Budget <b id="h-money"></b></span>
-      <span>Punkte <b id="h-score"></b></span>
+      <span>Tag <b id="h-day"></b> <small id="h-left"></small></span>
+      <span>Geld <b id="h-money"></b> <small id="h-income"></small></span>
       <span>Sauber <b id="h-clean"></b></span>
       <span>Abgenommen <b id="h-acc"></b></span>
+      <span>Rekord <b id="h-best">–</b></span>
     </div>
   </header>
 
@@ -23,8 +23,7 @@
       <canvas id="canvas"></canvas>
       <div id="shift-hud" hidden>
         <span id="s-mode"></span>
-        <span>Zeit <b id="s-time"></b></span>
-        <span>Abgesaugt <b id="s-removed"></b></span>
+        <span><b id="s-removed"></b></span>
         <span>Trübung <progress id="s-turb" max="1" value="0"></progress></span>
         <span>Schieflage <progress id="s-tilt" max="1" value="0"></progress></span>
       </div>
@@ -41,11 +40,17 @@
 
     <aside id="panel">
       <h2>Anlage an Land</h2>
-      <div id="plant"></div>
+      <div id="plant">
+        <div>Puffer: <b id="p-stock"></b> / <span id="p-cap"></span> m³</div>
+        <progress id="p-prog" max="1" value="0"></progress>
+        <div>Durchsatz: <span id="p-thru"></span> m³/s · Restvolumen nach Pressen: <span id="p-dew"></span></div>
+        <div>Chargen-Lotto: <span id="p-lotto"></span></div>
+        <div>Bisher: <span id="p-classes"></span></div>
+        <label><input type="checkbox" id="chk-oc"> <span id="p-oc"></span></label>
+      </div>
       <div id="upgrades"></div>
-      <button id="btn-start" class="primary">Schicht starten</button>
-      <button id="btn-drone">Drohne tauchen lassen (1 Tag)</button>
-      <button id="btn-wait">Tag aussetzen</button>
+      <button id="btn-drone" class="primary">Drohne tauchen lassen</button>
+      <button id="btn-pause">⏸ Pause (P)</button>
       <h2>Journal</h2>
       <ul id="log"></ul>
     </aside>

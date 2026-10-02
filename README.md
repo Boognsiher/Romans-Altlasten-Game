@@ -22,7 +22,9 @@ Entsorgung aus den Tranchen bezahlen, Ausrüstung ausbauen.
 | `src/main.js` | Verdrahtung, DOM-Panel |
 
 Spielregeln (Stand):
-- **Karte** zum Positionieren, **Querschnitt** zum Absaugen (gemeinsame Schichtuhr), **Drohne** zur Abnahme.
+- **Echtzeit:** Jede Sekunde kommen `incomePerSec` CHF Finanzierung herein, alles andere kostet. Ein Spieltag dauert `daySeconds` Sekunden, nach `deadlineDays` Tagen ist Schluss (alles in `src/config.js`).
+- **Gewonnen hat, wer am Ende am meisten Geld hat.** Früh fertig (Schicht abgetragen und abgenommen): Restmaterial wird entsorgt, die bis zur Frist noch zustehende Finanzierung wird gutgeschrieben. Frist abgelaufen: Eine Fremdfirma saniert den Rest zum Notfalltarif (`deadline.externalCostPerM3`) gegen Rechnung. Der Endstand kann negativ sein. Rekord wird im Browser gemerkt.
+- **Karte** zum Positionieren, **Querschnitt** zum Absaugen, **Drohne** zur Abnahme; alle laufen auf derselben Uhr, Pause mit P.
 - Querschnitt: Ponton so breit wie der Absaugbereich, Trübungsschutz-Kasten hängt vom Ponton, die Pumpe hängt an einer Kette (Laufkatze + Hoch/Runter) und schwebt, wo man sie lässt. Einsaugbereich unten rechts der Pumpe, gesaugt wird nur in Arbeitsrichtung (rechts); der Rückweg saugt nicht. Wer pro gefahrene Zelle zu viel abträgt, bringt die Pumpe zum Kippen (Ballast-Upgrade hilft).
 - Die belastete Schicht ist überall genau 1 m dick und folgt dem unebenen Seegrund (Sollsohle = gelb gestrichelt). Darunter liegt fester Untergrund: wer dort weitersaugt, trägt zu viel ab (Übertiefung, kostet extra, orange auf der Karte).
 - Harte Schichten (schraffiert) brauchen mehrere Überfahrten; Fremdstoffe verstopfen die Pumpe (Kopf anheben hilft).
