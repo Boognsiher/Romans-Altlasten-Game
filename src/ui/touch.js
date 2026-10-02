@@ -10,12 +10,17 @@ export function setupTouch(input, hooks) {
   root.hidden = false;
   document.body.classList.add('touch');
   let mode = 'map';
+  let analog = false; // Drohne: freier Stick in alle Richtungen statt Einrasten auf eine Achse
 
   // --- Stick ---
   let stickId = null;
   const moveStick = (e) => {
     const r = stick.getBoundingClientRect(), vx = e.clientX - (r.left + r.width / 2), vy = e.clientY - (r.top + r.height / 2);
-    const s = snapStick(vx, vy, 14, input.virtual);
+    let s;
+    if (analog) { // stufenlos: Ausschlag = Tempo
+      const len = Math.hypot(vx, vy), k = len < 14 ? 0 : Math.min(1, len / (KNOB_RADIUS * 1.4)) / len;
+      s = { dx: vx * k, dy: vy * k };
+    } else s = snapStick(vx, vy, 14, input.virtual);
     input.virtual.dx = s.dx; input.virtual.dy = s.dy;
     const len = Math.hypot(vx, vy) || 1, k = Math.min(1, KNOB_RADIUS / len);
     knob.style.transform = `translate(${vx * k}px, ${vy * k}px)`;
@@ -35,6 +40,7 @@ export function setupTouch(input, hooks) {
   act.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (mode === 'map') { hooks.anchor(); return; }
+    if (mode === 'drone') { hooks.recall(); return; }
     if (mode === 'slice') { actId = e.pointerId; act.setPointerCapture(e.pointerId); input.virtual.suction = true; act.classList.add('held'); }
   });
   act.addEventListener('pointerup', endAct);
@@ -46,9 +52,9 @@ export function setupTouch(input, hooks) {
       if (m === mode) return;
       mode = m;
       if (m !== 'slice') { input.virtual.suction = false; act.classList.remove('held'); }
-      if (m !== 'map' && m !== 'slice') { input.virtual.dx = 0; input.virtual.dy = 0; }
-      act.textContent = { map: '⚓ Anker', slice: '🌀 Saugen', drone: '🛸 Drohne' }[m];
-      act.disabled = m === 'drone';
+      analog = m === 'drone';
+      input.virtual.dx = 0; input.virtual.dy = 0; knob.style.transform = '';
+      act.textContent = { map: '⚓ Anker', slice: '🌀 Saugen', drone: '↩ Einholen' }[m];
     },
   };
 }

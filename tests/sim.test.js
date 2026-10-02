@@ -284,19 +284,6 @@ test('Automatik darf bei vollem Puffer nicht saugen', () => {
   assert.equal(sim.removed, 0);
 });
 
-test('Drohne: saubere Zellen werden abgenommen, Restschmutz gemeldet', () => {
-  const g = new Game(12); const lake = g.lake;
-  lake.mass.fill(0); lake.initial.fill(1); lake.accepted.fill(0);
-  lake.mass[lake.idx(2, 1)] = 1; // Restschmutz
-  const d = new DroneSim(lake, g.stats);
-  d.x = 2; d.y = 1;
-  d.update(0.1, {});
-  assert.ok(d.newlyAccepted > 0);
-  assert.equal(d.newlyFlagged, 1);
-  assert.equal(lake.flagged[lake.idx(2, 1)], 1);
-  assert.ok(lake.acceptedFraction() > 0 && lake.acceptedFraction() < 1);
-});
-
 test('Sieg braucht Sauberkeit UND Abnahme', () => {
   const g = quiet(new Game(13));
   g.lake.mass.fill(0);
@@ -684,39 +671,6 @@ test('Zerstörtes Fossil kostet eine Busse und wird gemeldet', () => {
   assert.ok(g.notes.some((n) => n.kind === 'bad'));
 });
 
-test('Drohne: entdeckt Fossilien einmal und dokumentiert Zellen vorher und nachher je einmal', () => {
-  const g = new Game(41); const l = g.lake;
-  l.setFlat(1, 3);
-  const i = l.idx(2, 1); l.fossil[i] = 3;
-  const d = new DroneSim(l, g.stats); d.x = 2.5; d.y = 1.5;
-  d.update(0.1, {});
-  assert.deepEqual(d.found, [3]);
-  assert.equal(l.fossilFound[i], 1);
-  const doc1 = d.docCells;
-  assert.ok(doc1 > 0);
-  d.update(0.1, {});
-  assert.equal(d.found.length, 1); // nicht doppelt
-  assert.equal(d.docCells, doc1); // dieselben Zellen zahlen nicht nochmal
-  l.mass.fill(0); // sauber gemacht: jetzt gibt es die „nachher“-Daten
-  d.update(0.1, {});
-  assert.ok(d.docCells > doc1);
-  const doc2 = d.docCells;
-  d.update(0.1, {});
-  assert.equal(d.docCells, doc2); // höchstens zweimal pro Zelle
-});
-
-test('Drohnenflug abrechnen: Befliegungsdaten bringen Geld, Funde landen in der Liste', () => {
-  const g = quiet(new Game(42));
-  const d = new DroneSim(g.lake, g.stats);
-  d.docCells = 50; d.found = [1, 4]; d.newlyAccepted = 3;
-  const m0 = g.money;
-  const r = g.finishDrone(d);
-  assert.equal(g.money, m0 + 50 * CONFIG.drone.docPerCell - CONFIG.drone.fee);
-  assert.equal(r.found, 2);
-  assert.equal(g.finds.length, 2);
-  assert.equal(g.finds[0].status, 'found');
-});
-
 test('Fund bergen: Kosten sofort, nach der Bergungszeit zahlt das Museum', () => {
   const g = quiet(new Game(43));
   const f = g.addFind(1);
@@ -780,4 +734,122 @@ test('Zusatzauftrag: Termin verpasst kostet Konventionalstrafe; unangenommenes A
   const o2 = g.jobs[0];
   assert.equal(g.declineJob(o2.id), true);
   assert.equal(g.jobs.length, 0);
+});
+
+// ----- Drohne im Kasten unter dem Ponton -----
+const droneFor = (g, thickness = 1, top = 3) => {
+  g.lake.setFlat(thickness, top);
+  const d = new DroneSim(g.lake, g.stats, { x0: 8, row: 10 });
+  d.x = 12; d.h = top + 0.6; d.face = 1; // Lampe zeigt nach rechts und leicht nach unten
+  return d;
+};
+const hover = (d, seconds, input = {}) => { for (let t = 0; t < seconds; t += 0.05) d.update(0.05, input); };
+
+test('Drohne: Lichtkegel zeigt in Fahrtrichtung und leicht nach unten, nichts hinter oder über ihr wird beleuchtet', () => {
+  const d = droneFor(new Game(50));
+  const cx = d.x - d.x0; // Spalte unter der Drohne
+  assert.ok(d.beamDir().x > 0 && d.beamDir().h < 0); // nach rechts, nach unten
+  assert.equal(d.light(cx + 2).lit, true); // vor ihr am Boden
+  assert.equal(d.light(cx - 3).lit, false); // hinter ihr
+  d.face = -1;
+  assert.equal(d.light(cx + 2).lit, false); // dreht die Lampe, ist vorne links
+  assert.equal(d.light(cx - 2).lit, true);
+  d.face = 1; d.h = 7; // hoch über dem Boden: ausser Reichweite
+  assert.equal(d.light(cx + 2).lit, false);
+});
+
+test('Drohne: Lampe und Blickrichtung folgen der Fahrt, beim Tauchen steiler', () => {
+  const d = droneFor(new Game(51));
+  d.h = 6;
+  hover(d, 0.5, { dx: -1, dy: 0 });
+  assert.equal(d.face, -1);
+  const flat = d.tilt;
+  hover(d, 0.5, { dx: -1, dy: 1 }); // tauchen
+  assert.ok(d.tilt > flat);
+  hover(d, 0.8, { dx: 1, dy: -1 }); // steigen und drehen
+  assert.equal(d.face, 1);
+  assert.ok(d.tilt < flat + 0.3);
+});
+
+test('Drohne: gescannt wird nur bei langsamer Fahrt und im Licht', () => {
+  const slow = droneFor(new Game(52)); const fast = droneFor(new Game(52));
+  slow.h = 3.6; fast.h = 3.6;
+  const c = 14 - 8; // Spalte 14 liegt vorne rechts im Licht
+  hover(slow, 2, { dx: 0.2, dy: 0 }); // gemächlich
+  assert.ok(slow.progress[c] > 0 || slow.scanned[c], 'langsam: Fortschritt');
+  hover(fast, 2, { dx: 1, dy: 0 }); // volle Fahrt
+  assert.equal(fast.scanned.some(Boolean), false, 'schnell: nichts gescannt');
+  assert.ok(fast.speed > CONFIG.drone.beam.maxScanSpeed);
+});
+
+test('Drohne: nah am Boden scannt schneller als weit weg', () => {
+  const near = droneFor(new Game(53)), far = droneFor(new Game(53));
+  near.h = 3.5; far.h = 6.2;
+  const c = 14 - 8;
+  hover(near, 0.5); hover(far, 0.5);
+  assert.ok(near.progress[c] > far.progress[c]);
+});
+
+test('Drohne: ein gescannte Spalte gilt für alle Zeilen des Kastens, nicht darüber hinaus', () => {
+  const g = new Game(54); const d = droneFor(g, 1, 3);
+  g.lake.mass.fill(0); g.lake.accepted.fill(0);
+  d.h = 3.6;
+  hover(d, 5);
+  const c = d.scanned.findIndex((v) => v === 1);
+  assert.ok(c >= 0, 'mindestens eine Spalte gescannt');
+  const B = CONFIG.drone.beam.boxRows;
+  for (let y = d.r0; y < d.r0 + B; y++) assert.equal(g.lake.accepted[g.lake.idx(d.x0 + c, y)], 1);
+  assert.equal(g.lake.accepted[g.lake.idx(d.x0 + c, d.r0 - 1)], 0);
+  assert.equal(g.lake.accepted[g.lake.idx(d.x0 + c, d.r0 + B)], 0);
+  assert.ok(d.newlyAccepted >= B); // fünf Zellen je Spalte
+});
+
+test('Drohne: Restschmutz wird gemeldet, Fossilien entdeckt, Befliegungsdaten je Zelle einmal vorher und einmal nachher', () => {
+  const g = new Game(55); const d = droneFor(g, 1, 3);
+  const c = 14 - 8, i = g.lake.idx(d.x0 + c, d.row);
+  g.lake.fossil[i] = 3;
+  d.h = 3.5;
+  hover(d, 6, { dx: 0.05, dy: 0 });
+  assert.equal(d.scanned[c], 1);
+  assert.ok(d.newlyFlagged >= 1); // alles verschmutzt: Restschmutz
+  assert.deepEqual(d.found, [3]);
+  assert.equal(g.lake.fossilFound[i], 1);
+  const doc1 = d.docCells;
+  assert.ok(doc1 >= CONFIG.drone.beam.boxRows);
+  // neue Drohne über sauberem Boden: „nachher“-Daten, nur einmal
+  g.lake.mass.fill(0);
+  const d2 = new DroneSim(g.lake, g.stats, { x0: 8, row: 10 }); d2.x = 12; d2.h = 3.5; d2.face = 1;
+  hover(d2, 6, { dx: 0.05, dy: 0 });
+  assert.ok(d2.docCells > 0);
+  const d3 = new DroneSim(g.lake, g.stats, { x0: 8, row: 10 }); d3.x = 12; d3.h = 3.5; d3.face = 1;
+  hover(d3, 6, { dx: 0.05, dy: 0 });
+  assert.equal(d3.docCells, 0); // schon dokumentiert
+});
+
+test('Drohne: bleibt im Kasten, taucht nicht in den Boden, nicht über die Wasseroberfläche', () => {
+  const g = new Game(56); const d = droneFor(g, 1, 3);
+  hover(d, 6, { dx: 1, dy: 0 });
+  assert.ok(d.x <= d.x0 + 16 - 0.3 + 1e-9);
+  hover(d, 6, { dx: -1, dy: 0 });
+  assert.ok(d.x >= d.x0 + 0.3 - 1e-9);
+  hover(d, 6, { dx: 0, dy: 1 });
+  assert.ok(d.h >= d.surfaceAt(d.x) + CONFIG.drone.beam.clearance - 1e-9);
+  hover(d, 6, { dx: 0, dy: -1 });
+  assert.ok(d.h <= 8 - 0.3 + 1e-9);
+});
+
+test('Drohne: Akku begrenzt den Flug; Flug abrechnen: Einsatz kostet, Befliegungsdaten bringen Geld, Funde landen in der Liste', () => {
+  const g = quiet(new Game(57));
+  const d = g.startDrone({ x0: 8, row: 10 });
+  assert.equal(d.timeLeft, g.stats.droneBattery);
+  hover(d, g.stats.droneBattery + 1);
+  assert.equal(d.over, true);
+  const d2 = g.startDrone({ x0: 8, row: 10 });
+  d2.docCells = 50; d2.found = [1, 4]; d2.newlyAccepted = 3;
+  const m0 = g.money;
+  const r = g.finishDrone(d2);
+  assert.equal(g.money, m0 + 50 * CONFIG.drone.docPerCell - CONFIG.drone.fee);
+  assert.equal(r.found, 2);
+  assert.equal(g.finds.length, 2);
+  assert.equal(g.finds[0].status, 'found');
 });

@@ -5,7 +5,7 @@ import { acceptChance, claimedAmount } from './sim/claims.js';
 import { createInput } from './ui/input.js';
 import { setupTouch } from './ui/touch.js';
 import { steerToward } from './ui/touch-logic.js';
-import { CELL, drawDrone, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen } from './ui/render.js';
+import { CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
@@ -209,7 +209,7 @@ function updateHud() {
   $('h-best').textContent = best === null ? '–' : chf(best);
 }
 
-function updatePanel() { updateUpgrades(); updatePlant(); updateClaims(); updateFinds(); updateJobs(); updateLog(); $('btn-drone').textContent = `Drohne tauchen lassen (${chf(CONFIG.drone.fee)})`; }
+function updatePanel() { updateUpgrades(); updatePlant(); updateClaims(); updateFinds(); updateJobs(); updateLog(); $('btn-drone').textContent = `Drohne ausbringen (${chf(CONFIG.drone.fee)})`; }
 
 // ---------- Overlay, Toast ----------
 function showOverlay(html) { const o = $('overlay'); o.innerHTML = `<div>${html}</div>`; o.classList.add('show'); }
@@ -228,14 +228,15 @@ function toast(text, kind = 'info') {
 const currentMode = () => (drone ? 'drone' : sim.mode);
 function syncMode() {
   const mode = currentMode();
-  const size = mode === 'slice' ? 'slice' : 'map';
+  const size = mode === 'slice' || mode === 'drone' ? 'slice' : 'map';
   if (size !== shownSize) { size === 'slice' ? sizeSlice(canvas) : sizeMap(canvas, game.lake); shownSize = size; }
   $('shift-hud').hidden = false;
-  $('shift-actions').hidden = mode === 'drone';
+  $('shift-actions').hidden = false;
   $('btn-anchor').hidden = mode !== 'map'; $('btn-leave').hidden = mode !== 'slice';
+  $('btn-drone2').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone';
   $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne' }[mode];
   if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; }
-  $('btn-drone').disabled = mode !== 'map';
+  $('btn-drone').disabled = mode !== 'slice';
 }
 function anchor() { if (!drone && sim.anchor()) syncMode(); }
 function leave() { if (!drone && sim.leave()) syncMode(); }
@@ -257,11 +258,13 @@ function setSheet(open) {
   updateClaims();
 }
 
+// Drohne ausbringen: taucht nur im Kasten unter dem verankerten Ponton
 function startDrone() {
-  if (sim.mode !== 'map' || drone) return;
-  drone = game.startDrone();
+  if (sim.mode !== 'slice' || drone) return;
+  drone = game.startDrone({ x0: sim.slice.x0, row: sim.slice.row });
   syncMode();
 }
+function recall() { if (drone) { drone.timeLeft = 0; drone.over = true; } }
 function endDrone() {
   const r = game.finishDrone(drone);
   drone = null;
@@ -297,13 +300,15 @@ function restart() {
 }
 
 $('btn-drone').onclick = startDrone;
+$('btn-drone2').onclick = startDrone;
+$('btn-recall').onclick = recall;
 $('btn-pause').onclick = togglePause;
 $('btn-pause2').onclick = togglePause;
 $('panel-handle').onclick = () => setSheet(!sheetOpen);
 addEventListener('resize', () => { if (sheetOpen && !narrow()) setSheet(false); });
 
 // Touch: Stick, Aktionsknopf, Tippen auf die Karte
-const touch = isTouch ? setupTouch(readInput, { anchor }) : null;
+const touch = isTouch ? setupTouch(readInput, { anchor, recall }) : null;
 readInput.onTap((px, py) => {
   if (drone || sim.mode !== 'map' || paused || sheetOpen || overlayOpen()) return;
   mapTarget = { x: Math.min(sim.lake.cols, Math.max(0, px / CELL)), y: Math.min(sim.lake.rows, Math.max(0, py / CELL)) };
@@ -325,8 +330,11 @@ function frame(now) {
 
   if (running) {
     if (drone) {
-      drone.update(dt, readInput.read({ x: drone.x * CELL, y: drone.y * CELL }, { holdToMove: true }));
-      $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
+      if (readInput.tap('Escape', 'KeyQ')) recall();
+      // Die Drohne bleibt in der Bildmitte: Maus/Finger steuern relativ zur Mitte, Tasten und Stick in beide Achsen
+      drone.update(dt, readInput.read({ x: canvas.width / 2, y: canvas.height / 2 }, { holdToMove: true }));
+      const done = drone.scanned.reduce((a, v) => a + v, 0);
+      $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${done}/16 Spalten gescannt · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
       if (drone.over) endDrone();
     } else {
@@ -347,6 +355,7 @@ function frame(now) {
         if (readInput.tap('Escape', 'KeyQ')) leave();
         if (readInput.tap('KeyT')) toggleAuto();
         if (readInput.tap('KeyR')) fixAuto();
+        if (readInput.tap('KeyV')) startDrone();
         if (sim.stats.echolot > 0) {
           if (readInput.tap('KeyF')) setCut(sim.cutDepth - 0.05);
           if (readInput.tap('KeyG')) setCut(sim.cutDepth + 0.05);
@@ -378,11 +387,11 @@ function frame(now) {
   if (game.status === 'ended' && !endShown) { updatePanel(); showEnd(); }
 
   if (sim.mode !== 'map' || drone) mapTarget = null;
-  if (!drone && sim.mode === 'slice') drawSlice(ctx, game.lake, sim);
+  if (drone) drawDroneView(ctx, game.lake, drone);
+  else if (sim.mode === 'slice') drawSlice(ctx, game.lake, sim);
   else {
-    drawMap(ctx, game.lake, drone ? null : sim, game.jobs);
-    if (drone) drawDrone(ctx, drone);
-    else if (mapTarget) { // Ziel-Markierung
+    drawMap(ctx, game.lake, sim, game.jobs);
+    if (mapTarget) { // Ziel-Markierung
       ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.beginPath();
       ctx.arc(mapTarget.x * CELL, mapTarget.y * CELL, 10, 0, Math.PI * 2);
       ctx.moveTo(mapTarget.x * CELL - 14, mapTarget.y * CELL); ctx.lineTo(mapTarget.x * CELL + 14, mapTarget.y * CELL);
@@ -400,14 +409,14 @@ showOverlay(`<h2>Seesanierung Uetikon</h2>
   was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
   <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
     <p><b>Stick</b> links fährt (rastet auf eine Achse ein). Der grosse Knopf rechts wirft auf der Karte den Anker und saugt im Querschnitt, solange du ihn hältst. Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
-    Oben links stehen Zurück zur Karte, Automatik und Reset, oben rechts die Pause. Der Shop liegt unten im Fach „Anlage &amp; Ausrüstung“; solange es offen ist, steht das Spiel still.</p></details>
+    Unter dem Spielfeld stehen Zurück zur Karte, Automatik, Reset und Drohne (dort steuert der Stick in alle Richtungen, der grosse Knopf holt sie ein), oben rechts die Pause. Der Shop liegt unten im Fach „Anlage &amp; Ausrüstung“; solange es offen ist, steht das Spiel still.</p></details>
   <details ${isTouch ? '' : 'open'}><summary>Steuerung am Computer</summary>
     <p>Karte: WASD / Pfeile (oder Maus gedrückt) fahren, <b>E</b> / Leertaste wirft den Anker. Querschnitt: A/D fährt die Pumpe seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse), Leertaste / Mausklick saugt, nur nach rechts.
-    <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>P</b> Pause.</p></details>
+    <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>V</b> Drohne ausbringen (Q holt sie ein), <b>P</b> Pause. Drohne: WASD/Pfeile in beide Achsen.</p></details>
   <details><summary>Regeln im See</summary>
     <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, der Rückweg saugt nicht. Gräbst du zu tief, kippt sie um.</p>
     <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
-    Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
+    Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> fährst du aus dem verankerten Ponton aus (V oder Knopf): Sie taucht nur im Kasten unter dem Ponton, sieht nur im Lichtkegel in Fahrtrichtung (leicht nach unten) und scannt den Boden, wenn du langsam und nah daran fährst. Sie nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
   <button class="primary" id="btn-go">Los</button>`);
 $('btn-go').onclick = hideOverlay;
 requestAnimationFrame(frame);

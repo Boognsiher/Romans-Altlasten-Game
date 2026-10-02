@@ -160,7 +160,8 @@ export class Game {
     }
   }
 
-  startDrone() { return new DroneSim(this.lake, this.stats); }
+  // Drohne ausbringen: taucht im Kasten unter dem Ponton (win = Querschnittsfenster des verankerten Pontons)
+  startDrone(win) { return new DroneSim(this.lake, this.stats, win); }
 
   // Drohnenflug abrechnen: Pauschale für den Einsatz, Befliegungsdaten werden an die Behörde verkauft, Funde gemeldet
   finishDrone(sim) {

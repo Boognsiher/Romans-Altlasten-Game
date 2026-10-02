@@ -91,6 +91,16 @@ export const CONFIG = {
   drone: {
     fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9, // Restschlamm (m³) pro Zelle für eine Abnahme
     docPerCell: 8, // CHF, die die Behörde pro neu dokumentierter Zelle zahlt (vorher und nachher, je einmal)
+    // Die Drohne taucht nur im Kasten unter dem Ponton (Querschnittsfenster). Sie sieht nur im Lichtkegel in Fahrtrichtung,
+    // leicht nach unten; gescannt wird nur, was beleuchtet ist, wenn sie langsam und nah am Boden fährt.
+    beam: {
+      halfAngle: 0.38, // rad: halber Öffnungswinkel des Lichtkegels (ca. 22°)
+      baseTilt: 0.42, // rad: Lichtkegel zeigt leicht nach unten (ca. 24°)
+      scanSeconds: 0.8, // so lange muss eine Spalte unter idealen Bedingungen beleuchtet sein
+      maxScanSpeed: 2.2, // Einheiten/s: schneller als das wird nichts mehr gescannt
+      clearance: 0.3, // Mindestabstand zum Boden
+      boxRows: 5, // der Kasten deckt so viele Karten-Zeilen ab (Ergebnis gilt für alle)
+    },
   },
   turbidityFineThreshold: 0.7,
   turbidityFinePerSecond: 400, // CHF/s über der Schwelle

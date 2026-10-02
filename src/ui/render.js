@@ -72,14 +72,85 @@ export function drawMap(ctx, lake, sim, jobs = []) {
   turbidityVeil(ctx, sim, cols * CELL, rows * CELL);
 }
 
-// ---------- Instanz 3: Drohne (Draufsicht, Scanradius) ----------
-export function drawDrone(ctx, drone) {
-  const px = drone.x * CELL, py = drone.y * CELL;
-  ctx.fillStyle = 'rgba(127,227,255,.15)'; ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(px, py, drone.stats.droneRadius * CELL, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#ffd24d'; ctx.fillRect(px - 8, py - 5, 16, 10);
-  ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.strokeRect(px - 8, py - 5, 16, 10);
-  ctx.fillStyle = '#222'; ctx.fillRect(px - 12, py - 8, 5, 3); ctx.fillRect(px + 7, py - 8, 5, 3);
+// ---------- Instanz 3: Drohne (Seitenansicht, Drohne fix in der Bildmitte, Landschaft fährt) ----------
+const Z = 56; // Pixel pro Einheit in der Drohnenansicht
+let darkness = null; // Offscreen-Ebene für die Dunkelheit mit ausgeschnittenem Lichtkegel
+
+export function drawDroneView(ctx, lake, d) {
+  const W = SLICE.cols * U, H = SLICE_TOP + SLICE.viewH * U + BEDROCK, cx = W / 2, cy = H / 2;
+  const sx = (wx) => cx + (wx - d.x) * Z, sy = (h) => cy + (d.h - h) * Z;
+  const col = (c) => lake.idx(d.x0 + c, d.row), T = (c) => lake.top[col(c)], G = (c) => lake.target[col(c)];
+  const xs = (c) => sx(d.x0 + c + 0.5);
+  ctx.fillStyle = '#0b1620'; ctx.fillRect(0, 0, W, H);
+  // Wasser im Kasten
+  const g = ctx.createLinearGradient(0, sy(SLICE.viewH), 0, sy(0));
+  g.addColorStop(0, '#2f7396'); g.addColorStop(1, '#0f2f46');
+  ctx.fillStyle = g; ctx.fillRect(sx(d.x0), sy(SLICE.viewH), SLICE.cols * Z, SLICE.viewH * Z);
+  // Boden: fester Untergrund, belastete Schicht, Übertiefung (wie im Querschnitt)
+  const band = (lowerH, upperH, fill) => {
+    ctx.beginPath(); ctx.moveTo(sx(d.x0), sy(upperH(0)));
+    for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), sy(upperH(c)));
+    ctx.lineTo(sx(d.x0 + SLICE.cols), sy(upperH(SLICE.cols - 1))); ctx.lineTo(sx(d.x0 + SLICE.cols), sy(lowerH(SLICE.cols - 1)));
+    for (let c = SLICE.cols - 1; c >= 0; c--) ctx.lineTo(xs(c), sy(lowerH(c)));
+    ctx.lineTo(sx(d.x0), sy(lowerH(0))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  };
+  band(() => -1.2, (c) => Math.min(T(c), G(c)), '#5d5b52');
+  band((c) => Math.min(T(c), G(c)), G, 'rgba(235,90,60,.5)');
+  band(G, (c) => Math.max(T(c), G(c)), '#7a5f3c');
+  ctx.fillStyle = '#34312d'; ctx.fillRect(sx(d.x0), sy(0), SLICE.cols * Z, 1.2 * Z); // Felsgrund
+  for (let c = 0; c < SLICE.cols; c++) {
+    const i = col(c);
+    if (lake.hard[i] && lake.mass[i] > 0) { ctx.fillStyle = lake.hard[i] > 1 ? 'rgba(25,18,10,.6)' : 'rgba(25,18,10,.32)'; ctx.fillRect(xs(c) - Z / 2, sy(T(c)), Z, lake.mass[i] * Z); }
+    if (lake.debris[i]) { ctx.strokeStyle = '#e6ebef'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(xs(c), sy(T(c)) - 10, 9, 0, Math.PI * 2); ctx.stroke(); }
+    if (lake.fossil[i] && lake.fossilFound[i]) { // entdeckter Fund
+      const fy = sy(G(c) - CONFIG_FOSSIL_DEPTH);
+      ctx.strokeStyle = '#ffd24d'; ctx.lineWidth = 2; ctx.beginPath();
+      for (let a = 0; a < 9; a += 0.25) { const r = 1.5 + a * 1.6; (a ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c) + Math.cos(a) * r, fy + Math.sin(a) * r); }
+      ctx.stroke();
+    }
+  }
+  // Scanstand je Spalte: gescannt = Linie auf der Oberfläche (grün sauber, rot Restschmutz), sonst Fortschrittsbalken
+  for (let c = 0; c < SLICE.cols; c++) {
+    let dirty = false;
+    for (let y = d.r0; y < d.r0 + CONFIG.drone.beam.boxRows; y++) if (lake.flagged[lake.idx(d.x0 + c, y)]) dirty = true;
+    const px = xs(c), py = sy(T(c));
+    if (d.scanned[c]) { ctx.strokeStyle = dirty ? '#ff5d4d' : '#5ae682'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(px - Z / 2 + 2, py); ctx.lineTo(px + Z / 2 - 2, py); ctx.stroke(); }
+    else if (d.progress[c] > 0) { ctx.fillStyle = '#7fe3ff'; ctx.fillRect(px - Z / 2 + 4, py + 4, (Z - 8) * d.progress[c], 5); }
+  }
+  // Kasten: Wände und Ponton oben, Kabel zur Drohne
+  ctx.fillStyle = '#c9d2d8'; ctx.fillRect(sx(d.x0) - 6, sy(SLICE.viewH), 6, (SLICE.viewH + 1.2) * Z); ctx.fillRect(sx(d.x0 + SLICE.cols), sy(SLICE.viewH), 6, (SLICE.viewH + 1.2) * Z);
+  ctx.fillStyle = '#d9dee3'; ctx.fillRect(sx(d.x0) - 6, sy(SLICE.viewH) - 26, SLICE.cols * Z + 12, 26);
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx(d.x0 + SLICE.cols / 2), sy(SLICE.viewH)); ctx.quadraticCurveTo(sx(d.x0 + SLICE.cols / 2), cy - 30, cx, cy); ctx.stroke();
+
+  // Dunkelheit: alles ist schwarz, ausser dem Lichtkegel in Fahrtrichtung und einem kleinen Glimmen um die Drohne
+  if (!darkness || darkness.width !== W || darkness.height !== H) { darkness = document.createElement('canvas'); darkness.width = W; darkness.height = H; }
+  const k = darkness.getContext('2d');
+  k.globalCompositeOperation = 'source-over'; k.clearRect(0, 0, W, H);
+  k.fillStyle = 'rgba(2,6,10,0.95)'; k.fillRect(0, 0, W, H);
+  k.globalCompositeOperation = 'destination-out';
+  const R = d.range * Z, ang = Math.atan2(Math.sin(d.tilt), d.face * Math.cos(d.tilt)), half = CONFIG.drone.beam.halfAngle;
+  const cone = k.createRadialGradient(cx, cy, 0, cx, cy, R);
+  cone.addColorStop(0, 'rgba(0,0,0,1)'); cone.addColorStop(0.65, 'rgba(0,0,0,0.9)'); cone.addColorStop(1, 'rgba(0,0,0,0)');
+  k.fillStyle = cone; k.beginPath(); k.moveTo(cx, cy); k.arc(cx, cy, R, ang - half, ang + half); k.closePath(); k.fill();
+  const glow = k.createRadialGradient(cx, cy, 0, cx, cy, Z * 0.9);
+  glow.addColorStop(0, 'rgba(0,0,0,0.9)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+  k.fillStyle = glow; k.beginPath(); k.arc(cx, cy, Z * 0.9, 0, Math.PI * 2); k.fill();
+  ctx.drawImage(darkness, 0, 0);
+
+  // Lichtschein im Kegel und Drohne (fix in der Bildmitte)
+  ctx.fillStyle = 'rgba(255,245,200,.10)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, ang - half, ang + half); ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(d.face, 1);
+  ctx.fillStyle = '#ffd24d'; ctx.fillRect(-14, -8, 28, 16);
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.strokeRect(-14, -8, 28, 16);
+  ctx.fillStyle = '#222'; ctx.fillRect(-18, -12, 10, 3); ctx.fillRect(8, -12, 10, 3);
+  ctx.fillStyle = '#fff6c9'; ctx.beginPath(); ctx.arc(14, 2, 4, 0, Math.PI * 2); ctx.fill(); // Lampe vorne
+  ctx.restore();
+  if (!d.scanned.some(Boolean)) {
+    ctx.fillStyle = '#ffffffcc'; ctx.font = '14px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Langsam und nah am Boden fahren: Nur was im Lichtkegel liegt, wird gescannt', cx, H - 14);
+    ctx.textAlign = 'start';
+  }
+  if (d.speed > CONFIG.drone.beam.maxScanSpeed) { ctx.fillStyle = '#ff7a6b'; ctx.font = 'bold 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Zu schnell zum Scannen', cx, cy + 46); ctx.textAlign = 'start'; }
 }
 
 // ---------- Instanz 2: Querschnitt ----------
