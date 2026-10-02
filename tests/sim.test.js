@@ -81,7 +81,7 @@ test('Querschnitt: Saugkopf in der Höhe saugt nichts', () => {
   assert.ok(Math.abs(r.removed - 3) < 1e-6);
 });
 
-const quiet = (g) => { g.rng = Object.assign(() => 0.5, { chance: () => false, range: (a) => a }); return g; }; // keine Ereignisse, Typ E
+const quiet = (g) => { g.rng = Object.assign(() => 0.5, { chance: () => false, range: (a) => a, int: (a) => a }); return g; }; // keine Ereignisse, Typ E
 
 test('Material geht in den Puffer, die Anlage verarbeitet es laufend und bezahlt jede Charge', () => {
   const g = quiet(new Game(4));
@@ -650,4 +650,134 @@ test('Harte Schicht: abgesaugtes Material aus harten Zellen wird als Mehraufwand
   l.hard.fill(2);
   const hard = l.suckProfile(1, 1.5, 3, 1.8, 2);
   assert.ok(hard.hardRemoved > 0 && hard.hardRemoved <= hard.removed + 1e-9);
+});
+
+test('Fossilien: gleichmässig verteilt, teils unter der bestellten Fläche (gefährdet), teils daneben (sicher)', () => {
+  const l = Lake.generate(createRng(7));
+  let n = 0, inLayer = 0, outside = 0;
+  for (let i = 0; i < l.fossil.length; i++) if (l.fossil[i]) { n++; if (l.initial[i]) inLayer++; else outside++; }
+  assert.equal(n, CONFIG.fossils.count);
+  assert.ok(inLayer > 0 && outside > 0);
+  assert.ok(l.fossilFound.every((v) => v === 0)); // anfangs unentdeckt
+});
+
+test('Fossil geht verloren, wenn tiefer als die Fossilientiefe unter der Sollsohle gegraben wird', () => {
+  const l = new Lake(4, 4); l.setFlat(1, 3); // Sollsohle bei 2
+  const i = l.idx(1, 1); l.fossil[i] = 2; l.fossilFound[i] = 1;
+  let lost = [];
+  for (let n = 0; n < 200 && l.target[i] - l.top[i] <= CONFIG.fossils.depthBelowTarget; n++) {
+    const r = l.suckProfile(1, 1.5, l.top[i], 1.8, 1);
+    lost = lost.concat(r.fossilsLost);
+    if (l.target[i] - l.top[i] <= CONFIG.fossils.depthBelowTarget) assert.equal(l.fossil[i], 2, 'noch flach genug: bleibt erhalten');
+  }
+  assert.deepEqual(lost, [2]);
+  assert.equal(l.fossil[i], 0);
+  assert.equal(l.fossilFound[i], 0);
+});
+
+test('Zerstörtes Fossil kostet eine Busse und wird gemeldet', () => {
+  const g = quiet(new Game(40));
+  const m0 = g.money;
+  g.collect(ev({ fossilsLost: [1] }));
+  assert.equal(g.money, m0 - CONFIG.fossils.destroyFine);
+  assert.equal(g.totals.fossilsLost, 1);
+  assert.ok(g.notes.some((n) => n.kind === 'bad'));
+});
+
+test('Drohne: entdeckt Fossilien einmal und dokumentiert Zellen vorher und nachher je einmal', () => {
+  const g = new Game(41); const l = g.lake;
+  l.setFlat(1, 3);
+  const i = l.idx(2, 1); l.fossil[i] = 3;
+  const d = new DroneSim(l, g.stats); d.x = 2.5; d.y = 1.5;
+  d.update(0.1, {});
+  assert.deepEqual(d.found, [3]);
+  assert.equal(l.fossilFound[i], 1);
+  const doc1 = d.docCells;
+  assert.ok(doc1 > 0);
+  d.update(0.1, {});
+  assert.equal(d.found.length, 1); // nicht doppelt
+  assert.equal(d.docCells, doc1); // dieselben Zellen zahlen nicht nochmal
+  l.mass.fill(0); // sauber gemacht: jetzt gibt es die „nachher“-Daten
+  d.update(0.1, {});
+  assert.ok(d.docCells > doc1);
+  const doc2 = d.docCells;
+  d.update(0.1, {});
+  assert.equal(d.docCells, doc2); // höchstens zweimal pro Zelle
+});
+
+test('Drohnenflug abrechnen: Befliegungsdaten bringen Geld, Funde landen in der Liste', () => {
+  const g = quiet(new Game(42));
+  const d = new DroneSim(g.lake, g.stats);
+  d.docCells = 50; d.found = [1, 4]; d.newlyAccepted = 3;
+  const m0 = g.money;
+  const r = g.finishDrone(d);
+  assert.equal(g.money, m0 + 50 * CONFIG.drone.docPerCell - CONFIG.drone.fee);
+  assert.equal(r.found, 2);
+  assert.equal(g.finds.length, 2);
+  assert.equal(g.finds[0].status, 'found');
+});
+
+test('Fund bergen: Kosten sofort, nach der Bergungszeit zahlt das Museum', () => {
+  const g = quiet(new Game(43));
+  const f = g.addFind(1);
+  const m0 = g.money;
+  assert.equal(g.recoverFind(f.id), true);
+  assert.equal(g.recoverFind(f.id), false);
+  assert.equal(g.money, m0 - f.fee);
+  for (let i = 0; i < Math.round(CONFIG.fossils.recoverSeconds * 10) - 5; i++) g.update(0.1);
+  assert.equal(g.finds.length, 1); // noch unterwegs
+  for (let i = 0; i < 15; i++) g.update(0.1);
+  assert.equal(g.finds.length, 0);
+  assert.ok(g.money > m0 - f.fee); // verkauft
+  assert.equal(g.totals.findsSold, 1);
+});
+
+test('Zonenstand: Zellen, sauberer Anteil, abgenommener Anteil, Restmenge', () => {
+  const l = new Lake(10, 10); l.setFlat(1, 3);
+  const z = { x: 2, y: 2, w: 4, h: 3 };
+  let st = l.zoneStats(z);
+  assert.equal(st.n, 12);
+  assert.equal(st.cleaned, 0);
+  assert.equal(st.volume, 12 * l.area);
+  for (let x = 2; x < 6; x++) { l.mass[l.idx(x, 2)] = 0; l.accepted[l.idx(x, 2)] = 1; }
+  st = l.zoneStats(z);
+  assert.ok(Math.abs(st.cleaned - 4 / 12) < 1e-9 && Math.abs(st.accepted - 4 / 12) < 1e-9);
+});
+
+test('Zusatzauftrag der Gemeinde: Angebot, annehmen, Prämie bei sauberer und abgenommener Zone', () => {
+  const g = quiet(new Game(44)); g.lake.setFlat(1, 3);
+  g.time = g.nextJobAt; g.update(0.1);
+  assert.equal(g.jobs.length, 1);
+  const j = g.jobs[0];
+  assert.equal(j.status, 'offer');
+  assert.ok(j.bonus >= CONFIG.jobs.bonusBase);
+  assert.equal(g.acceptJob(j.id), true);
+  assert.equal(g.acceptJob(j.id), false);
+  const m0 = g.money;
+  for (let i = 0; i < 10; i++) g.update(0.1);
+  assert.equal(g.jobs.length, 1); // Zone ist noch schmutzig
+  for (let y = j.zone.y; y < j.zone.y + j.zone.h; y++) for (let x = j.zone.x; x < j.zone.x + j.zone.w; x++) { g.lake.mass[g.lake.idx(x, y)] = 0; g.lake.accepted[g.lake.idx(x, y)] = 1; }
+  for (let i = 0; i < 10; i++) g.update(0.1);
+  assert.equal(g.jobs.length, 0);
+  assert.equal(g.money, m0 + j.bonus);
+  assert.equal(g.totals.jobsDone, 1);
+});
+
+test('Zusatzauftrag: Termin verpasst kostet Konventionalstrafe; unangenommenes Angebot verfällt; ablehnen geht', () => {
+  const g = quiet(new Game(45)); g.lake.setFlat(1, 3);
+  g.time = g.nextJobAt; g.update(0.1);
+  const j = g.jobs[0]; g.acceptJob(j.id);
+  const m0 = g.money;
+  g.time = j.dueAt; g.update(0.1);
+  assert.equal(g.jobs.length, 0);
+  assert.equal(g.totals.jobsFailed, 1);
+  assert.equal(g.money, m0 - Math.round((j.bonus * CONFIG.jobs.penaltyShare) / 100) * 100);
+  g.time = g.nextJobAt; g.update(0.1);
+  const o = g.jobs[0]; assert.equal(o.status, 'offer');
+  g.time = o.offerExpiresAt; g.update(0.1);
+  assert.equal(g.jobs.length, 0); // Angebot verfallen
+  g.time = g.nextJobAt; g.update(0.1);
+  const o2 = g.jobs[0];
+  assert.equal(g.declineJob(o2.id), true);
+  assert.equal(g.jobs.length, 0);
 });

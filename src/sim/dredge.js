@@ -60,7 +60,7 @@ export class DredgeSim {
   // Gibt zurück, was in diesem Schritt passiert ist: { removed, toxicRemoved, overdug, hardRemoved, fines, repairs, tips, clogs, clogItems }
   update(dt, input) {
     const s = this.stats;
-    const d = { removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0, fines: 0, repairs: 0, tips: 0, clogs: 0, clogItems: [] };
+    const d = { removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0, fossilsLost: [], fines: 0, repairs: 0, tips: 0, clogs: 0, clogItems: [] };
 
     if (this.mode === 'map') {
       let dx = input.dx || 0, dy = input.dy || 0;
@@ -76,7 +76,7 @@ export class DredgeSim {
         if (n.kind === 'clog') { d.clogs++; d.clogItems.push(n.item); }
         if (n.kind === 'tip') { d.tips++; d.repairs += CONFIG.pump.repairCost; }
       }
-      d.removed = r.removed; d.toxicRemoved = r.toxicRemoved; d.overdug = r.overdug; d.hardRemoved = r.hardRemoved;
+      d.removed = r.removed; d.toxicRemoved = r.toxicRemoved; d.overdug = r.overdug; d.hardRemoved = r.hardRemoved; d.fossilsLost = r.fossilsLost;
       if (this.slice.suctioning) {
         // Aufgewirbelter Schlamm: mehr Leistung, Bewegung und Altlasten -> mehr Trübung
         const boost = (this.slice.moving ? 1.4 : 1) * (r.toxicRemoved > 0 ? 1.5 : 1);

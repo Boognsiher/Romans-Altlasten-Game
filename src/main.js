@@ -122,7 +122,67 @@ function updateClaims() {
       r.amt.textContent = `Forderung ${chf(c.claimed)}`;
     }
   }
-  $('panel-handle').textContent = (sheetOpen ? '▼ Schliessen (Spiel pausiert)' : '▲ Anlage & Ausrüstung') + (game.openClaims ? ` · ${game.openClaims} ${game.openClaims > 1 ? 'Nachträge' : 'Nachtrag'}` : '');
+  const open = game.openClaims + game.finds.filter((f) => f.status === 'found').length + game.jobs.filter((j) => j.status === 'offer').length;
+  $('panel-handle').textContent = (sheetOpen ? '▼ Schliessen (Spiel pausiert)' : '▲ Anlage & Ausrüstung') + (open ? ` · ${open} offen` : '');
+}
+
+// ---------- Funde und Zusatzaufträge ----------
+const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const emptyNote = (text) => mk('div', 'empty', text);
+const daysLeft = (t) => Math.max(0, Math.ceil((t - game.time) / CONFIG.daySeconds));
+let findSig = null, jobSig = null;
+const findRefs = {}, jobRefs = {};
+
+function updateFinds() {
+  const sig = game.finds.map((f) => `${f.id}:${f.status}`).join(',');
+  if (sig !== findSig) {
+    findSig = sig;
+    for (const k of Object.keys(findRefs)) delete findRefs[k];
+    const rows = game.finds.map((f) => {
+      const row = mk('div', `claim ${f.status}`), info = mk('small'), line = mk('div', 'row');
+      if (f.status === 'found') {
+        const btn = mk('button', '', `Bergen lassen (−${chf(f.fee)})`);
+        btn.onclick = () => { game.recoverFind(f.id); updatePanel(); };
+        line.append(btn);
+      }
+      row.append(mk('b', '', f.name), info, line);
+      findRefs[f.id] = { info };
+      return row;
+    });
+    $('finds').replaceChildren(...(rows.length ? rows : [emptyNote('Noch nichts gefunden. Die Tauchdrohne entdeckt Fossilien im Untergrund; das Museum zahlt für die Bergung. Wer zu tief saugt, zerstört sie.')]));
+  }
+  for (const f of game.finds) {
+    const r = findRefs[f.id]; if (!r) continue;
+    r.info.textContent = f.status === 'found' ? `Museum zahlt etwa ${chf(f.value)} · Bergung ${chf(f.fee)}` : `Wird geborgen … Museum meldet sich in ${daysLeft(f.sellAt)} Tagen`;
+  }
+}
+
+function updateJobs() {
+  const sig = game.jobs.map((j) => `${j.id}:${j.status}`).join(',');
+  if (sig !== jobSig) {
+    jobSig = sig;
+    for (const k of Object.keys(jobRefs)) delete jobRefs[k];
+    const rows = game.jobs.map((j) => {
+      const row = mk('div', `claim ${j.status}`), info = mk('small'), line = mk('div', 'row');
+      if (j.status === 'offer') {
+        const yes = mk('button', 'primary', 'Annehmen'), no = mk('button', '', 'Ablehnen');
+        yes.onclick = () => { game.acceptJob(j.id); updatePanel(); };
+        no.onclick = () => { game.declineJob(j.id); updatePanel(); };
+        line.append(yes, no);
+      }
+      row.append(mk('b', '', `Gemeinde: Bereich „${j.place}“ (Prämie ${chf(j.bonus)})`), info, line);
+      jobRefs[j.id] = { info };
+      return row;
+    });
+    $('jobs').replaceChildren(...(rows.length ? rows : [emptyNote('Gerade keine Anfragen. Die Gemeinde meldet sich, wenn sie einen Uferbereich zum Termin sauber haben will.')]));
+  }
+  for (const j of game.jobs) {
+    const r = jobRefs[j.id]; if (!r) continue;
+    const p = j.progress, J = CONFIG.jobs;
+    r.info.textContent = j.status === 'offer'
+      ? `Zone auf der Karte gelb markiert · ca. ${Math.round(p.volume)} m³ Rest · Angebot gilt noch ${daysLeft(j.offerExpiresAt)} Tage · dann ${J.dueDays} Tage Zeit`
+      : `Termin in ${daysLeft(j.dueAt)} Tagen · sauber ${pct(p.cleaned)} (nötig ${pct(J.cleanNeeded)}) · abgenommen ${pct(p.accepted)} (nötig ${pct(J.acceptedNeeded)})`;
+  }
 }
 
 let logSig = '';
@@ -149,7 +209,7 @@ function updateHud() {
   $('h-best').textContent = best === null ? '–' : chf(best);
 }
 
-function updatePanel() { updateUpgrades(); updatePlant(); updateClaims(); updateLog(); $('btn-drone').textContent = `Drohne tauchen lassen (${chf(CONFIG.drone.fee)})`; }
+function updatePanel() { updateUpgrades(); updatePlant(); updateClaims(); updateFinds(); updateJobs(); updateLog(); $('btn-drone').textContent = `Drohne tauchen lassen (${chf(CONFIG.drone.fee)})`; }
 
 // ---------- Overlay, Toast ----------
 function showOverlay(html) { const o = $('overlay'); o.innerHTML = `<div>${html}</div>`; o.classList.add('show'); }
@@ -206,7 +266,8 @@ function endDrone() {
   const r = game.finishDrone(drone);
   drone = null;
   syncMode();
-  toast(r.flagged ? `Drohne: ${r.accepted} Zellen abgenommen, ${r.flagged} mit Restschmutz (rot markiert)` : `Drohne: ${r.accepted} Zellen abgenommen, nichts zu beanstanden`, r.flagged ? 'bad' : 'good');
+  const extra = `${r.found ? `, ${r.found} Fund${r.found > 1 ? 'e' : ''}` : ''}${r.doc ? `, Befliegungsdaten +${chf(r.doc)}` : ''}`;
+  toast(r.flagged ? `Drohne: ${r.accepted} Zellen abgenommen, ${r.flagged} mit Restschmutz (rot markiert)${extra}` : `Drohne: ${r.accepted} Zellen abgenommen, nichts zu beanstanden${extra}`, r.flagged ? 'bad' : 'good');
 }
 
 // ---------- Spielende ----------
@@ -220,6 +281,7 @@ function showEnd() {
     <p>Endstand: <b>${chf(e.finalMoney)}</b>${record ? ' <b class="good">Neuer Rekord!</b>' : best !== null ? `<br><small>Rekord: ${chf(best)}</small>` : ''}</p>
     <p><small>Vergütung insgesamt +${chf(t.pay)} · Nachträge +${chf(t.claimsPaid)} (${t.claimsAccepted} genehmigt, ${t.claimsPartial} hälftig, ${t.claimsRejected} abgelehnt, ${t.claimsExpired} verjährt)<br>${e.external ? `Fremdfirma für den Rest −${chf(e.external)}<br>` : ''}
     Abgesaugt ${t.removed.toFixed(0)} m³ · Chargen ${Object.entries(t.classes).map(([k, n]) => `${n}× ${k}`).join(', ')}<br>
+    Befliegungsdaten +${chf(t.docPaid)} · Fossilien +${chf(t.findsPaid)} (${t.findsSold} verkauft, ${t.fossilsLost} zerstört) · Gemeinde-Aufträge +${chf(t.jobsPaid)} (${t.jobsDone} erledigt, ${t.jobsFailed} verpasst)<br>
     Entsorgung ${chf(t.disposalPaid)} · Bussen ${chf(t.finesPaid)} · Bergungen ${chf(t.repairsPaid)} · Übertiefung ${chf(t.overdigPaid)}</small></p>
     <p>Gewonnen hat, wer am Ende am meisten Geld hat.</p>
     <button class="primary" id="btn-restart">Neues Spiel</button>`);
@@ -230,7 +292,7 @@ function restart() {
   game = new Game(); sim = game.createSession(); drone = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
-  setSheet(false); mapTarget = null; claimSig = null;
+  setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null;
   hideOverlay(); syncMode(); updatePanel();
 }
 
@@ -318,7 +380,7 @@ function frame(now) {
   if (sim.mode !== 'map' || drone) mapTarget = null;
   if (!drone && sim.mode === 'slice') drawSlice(ctx, game.lake, sim);
   else {
-    drawMap(ctx, game.lake, drone ? null : sim);
+    drawMap(ctx, game.lake, drone ? null : sim, game.jobs);
     if (drone) drawDrone(ctx, drone);
     else if (mapTarget) { // Ziel-Markierung
       ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.beginPath();
@@ -345,7 +407,7 @@ showOverlay(`<h2>Seesanierung Uetikon</h2>
   <details><summary>Regeln im See</summary>
     <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, der Rückweg saugt nicht. Gräbst du zu tief, kippt sie um.</p>
     <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
-    Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Zum Schluss nimmt die <b>Tauchdrohne</b> den Seegrund ab.</p></details>
+    Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
   <button class="primary" id="btn-go">Los</button>`);
 $('btn-go').onclick = hideOverlay;
 requestAnimationFrame(frame);

@@ -11,6 +11,8 @@ export class DroneSim {
     this.timeLeft = stats.droneBattery;
     this.newlyAccepted = 0;
     this.newlyFlagged = 0;
+    this.found = []; // neu entdeckte Fossilien (Indizes)
+    this.docCells = 0; // neu dokumentierte Zellen (Befliegungsdaten)
     this.over = false;
   }
 
@@ -28,6 +30,11 @@ export class DroneSim {
       for (let x = Math.max(0, Math.floor(this.x - r)); x <= Math.min(L.cols - 1, Math.ceil(this.x + r)); x++) {
         if (Math.hypot(x + 0.5 - this.x, y + 0.5 - this.y) > r) continue;
         const i = L.idx(x, y);
+        if (L.fossil[i] && !L.fossilFound[i]) { L.fossilFound[i] = 1; this.found.push(L.fossil[i]); }
+        if (L.initial[i]) { // Befliegungsdaten: einmal vorher (verschmutzt), einmal nachher (sauber)
+          const bit = L.mass[i] < CONFIG.drone.acceptMax ? 2 : 1;
+          if (!(L.docBits[i] & bit)) { L.docBits[i] |= bit; this.docCells++; }
+        }
         if (L.mass[i] < CONFIG.drone.acceptMax) {
           if (!L.accepted[i] && L.initial[i]) this.newlyAccepted++;
           L.accepted[i] = 1; L.flagged[i] = 0;

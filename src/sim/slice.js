@@ -6,7 +6,7 @@ import { CONFIG, DEBRIS } from '../config.js';
 // Rückwärts wird nicht gesaugt; der Kopf muss zum Anfang zurückgezogen werden (schneller).
 export const SLICE = { cols: 16, viewH: 8, work: { x: 1, y: 1 }, returnBoost: 1.6 };
 
-const ZERO = { removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0 };
+const ZERO = { removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0, fossilsLost: [] };
 
 const AUTO_ERRORS = [
   { id: 'stuck', text: 'Automatik hängt sich auf und starrt ins Wasser' },

@@ -1,4 +1,4 @@
-import { CONFIG, UPGRADES } from '../config.js';
+import { CONFIG, UPGRADES, FOSSILS } from '../config.js';
 import { Lake } from './lake.js';
 import { DredgeSim } from './dredge.js';
 import { DroneSim } from './drone.js';
@@ -7,6 +7,7 @@ import { computeStats, upgradeCost } from './stats.js';
 import { createRng } from './rng.js';
 import { processBatch } from './plant.js';
 import { clampMarkup, claimedAmount, decide, pickText } from './claims.js';
+import { TEXTS as XT, PLACES, pick, makeZone } from './extras.js';
 
 const freshDay = () => ({ removed: 0, pay: 0, fines: 0, repairs: 0, overCost: 0, overdug: 0, clogs: 0 });
 
@@ -25,11 +26,16 @@ export class Game {
     this.batch = { vol: 0, toxic: 0, idle: 0 }; // Charge, die gerade in der Anlage zusammenkommt
     this.cutDepth = CONFIG.echolot.defaultCut; // Abtragsdicke-Sollwert der Automatik
     this.overclock = false; // Anlage übertakten: mehr Durchsatz, höheres Risiko teurer Klassen
-    this.totals = { removed: 0, pay: 0, claimsPaid: 0, claimsFees: 0, claimsAccepted: 0, claimsPartial: 0, claimsRejected: 0, claimsExpired: 0, disposalPaid: 0, finesPaid: 0, repairsPaid: 0, overdigPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
+    this.totals = { removed: 0, pay: 0, claimsPaid: 0, claimsFees: 0, claimsAccepted: 0, claimsPartial: 0, claimsRejected: 0, claimsExpired: 0, docPaid: 0, findsPaid: 0, findsFees: 0, findsSold: 0, fossilsLost: 0, fossilFines: 0, jobsDone: 0, jobsFailed: 0, jobsPaid: 0, jobsPenalty: 0, disposalPaid: 0, finesPaid: 0, repairsPaid: 0, overdigPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
     this.today = freshDay();
     this.claims = []; // Nachträge: { id, kind, text, fair, markup, status: 'draft' | 'submitted', expiresAt, resolveAt, claimed }
     this.claimAcc = { hard: 0, toxic: 0 }; // gesammelter Mehraufwand, aus dem Nachträge entstehen
     this.claimSeq = 0;
+    this.finds = []; // Fossilienfunde: { id, name, fee, value, status: 'found' | 'recovering', sellAt }
+    this.jobs = []; // Zusatzaufträge der Gemeinde: { id, status: 'offer' | 'active', place, zone, bonus, offerExpiresAt, dueAt, progress }
+    this.extraSeq = 0;
+    this.nextJobAt = CONFIG.jobs.firstAtDay * CONFIG.daySeconds;
+    this.jobCheck = 0;
     this.notes = []; // Meldungen für die Oberfläche (Toast): { text, kind }
     this.status = 'playing'; // 'playing' | 'ended'
     this.end = null; // { reason: 'early' | 'deadline' | 'bankrupt', finalMoney, external }
@@ -89,6 +95,12 @@ export class Game {
     a.hard += d.hardRemoved ?? 0; a.toxic += toxic;
     while (a.hard >= C.hardThreshold) { a.hard -= C.hardThreshold; this.addClaim('hard', `Mehraufwand harte Schicht (${C.hardThreshold} m³ Hartnäckiges)`, C.hardThreshold * C.hardPerM3); }
     while (a.toxic >= C.toxicThreshold) { a.toxic -= C.toxicThreshold; this.addClaim('toxic', 'Fassfund: Sonderbehandlung und Papierkram', C.toxicFair); }
+    for (const idx of d.fossilsLost ?? []) {
+      const name = FOSSILS[idx - 1], fine = CONFIG.fossils.destroyFine;
+      this.money -= fine; t.fossilsLost++; t.fossilFines += fine;
+      const msg = `${name} ${pick(XT.lost, this.rng)} (−${fine} CHF)`;
+      this.say(msg, 'bad'); this.notify(msg, 'bad');
+    }
     if (d.tips) this.say(`Pumpe umgekippt, Bergung −${d.repairs} CHF`, 'bad');
   }
 
@@ -150,11 +162,107 @@ export class Game {
 
   startDrone() { return new DroneSim(this.lake, this.stats); }
 
-  // Drohnenflug abrechnen: Pauschale für den Einsatz
+  // Drohnenflug abrechnen: Pauschale für den Einsatz, Befliegungsdaten werden an die Behörde verkauft, Funde gemeldet
   finishDrone(sim) {
-    this.money -= CONFIG.drone.fee;
-    this.say(`Drohne: ${sim.newlyAccepted} Zellen abgenommen, ${sim.newlyFlagged} mit Restschmutz gemeldet. Einsatz −${CONFIG.drone.fee} CHF`, sim.newlyFlagged ? 'bad' : 'good');
-    return { accepted: sim.newlyAccepted, flagged: sim.newlyFlagged };
+    const doc = sim.docCells * CONFIG.drone.docPerCell;
+    this.money += doc - CONFIG.drone.fee;
+    this.totals.docPaid += doc;
+    this.say(`Drohne: ${sim.newlyAccepted} Zellen abgenommen, ${sim.newlyFlagged} mit Restschmutz gemeldet. Einsatz −${CONFIG.drone.fee} CHF${doc ? `, Befliegungsdaten +${doc} CHF` : ''}`, sim.newlyFlagged ? 'bad' : 'good');
+    for (const idx of sim.found) this.addFind(idx);
+    return { accepted: sim.newlyAccepted, flagged: sim.newlyFlagged, found: sim.found.length, doc };
+  }
+
+  // ---------- Fossilienfunde ----------
+  addFind(idx) {
+    const F = CONFIG.fossils, name = FOSSILS[idx - 1];
+    const fee = Math.round(this.rng.range(F.recoverFee[0], F.recoverFee[1]) / 50) * 50;
+    const value = Math.round(this.rng.range(F.value[0], F.value[1]) / 100) * 100;
+    const f = { id: ++this.extraSeq, name, fee, value, status: 'found', sellAt: 0 };
+    this.finds.push(f);
+    const msg = `Drohne meldet einen Fund im Untergrund: ${name}`;
+    this.say(msg, 'good'); this.notify(msg, 'good');
+    return f;
+  }
+
+  // Bergung beauftragen (kostet), danach kauft das Museum den Fund
+  recoverFind(id) {
+    const f = this.finds.find((x) => x.id === id && x.status === 'found');
+    if (!f || this.status !== 'playing') return false;
+    f.status = 'recovering'; f.sellAt = this.time + CONFIG.fossils.recoverSeconds;
+    this.money -= f.fee; this.totals.findsFees += f.fee;
+    this.say(`Bergung beauftragt: ${f.name} (−${f.fee} CHF)`, 'info');
+    return true;
+  }
+
+  _finds() {
+    for (const f of [...this.finds]) {
+      if (f.status !== 'recovering' || this.time < f.sellAt) continue;
+      this.finds.splice(this.finds.indexOf(f), 1);
+      const price = Math.round((f.value * this.rng.range(0.7, 1.3)) / 100) * 100;
+      this.money += price; this.totals.findsPaid += price; this.totals.findsSold++;
+      const msg = `${f.name} verkauft (+${price} CHF). ${pick(XT.sold, this.rng)}`;
+      this.say(msg, 'good'); this.notify(msg, 'good');
+    }
+  }
+
+  // ---------- Zusatzaufträge der Gemeinde ----------
+  _offerJob() {
+    const J = CONFIG.jobs;
+    const made = makeZone(this.lake, this.rng, this.jobs.map((j) => j.zone));
+    if (!made) return;
+    const place = pick(PLACES, this.rng);
+    const bonus = Math.round((J.bonusBase + made.stats.volume * J.bonusPerM3) / 100) * 100;
+    const j = { id: ++this.extraSeq, status: 'offer', place, zone: made.zone, bonus, offerExpiresAt: this.time + J.offerDays * CONFIG.daySeconds, dueAt: 0, progress: made.stats };
+    this.jobs.push(j);
+    const msg = `Die Gemeinde möchte den Bereich „${place}“ sauber haben (Prämie ${bonus} CHF)`;
+    this.say(msg, 'info'); this.notify(msg, 'info');
+  }
+
+  acceptJob(id) {
+    const j = this.jobs.find((x) => x.id === id && x.status === 'offer');
+    if (!j || this.status !== 'playing') return false;
+    j.status = 'active'; j.dueAt = this.time + CONFIG.jobs.dueDays * CONFIG.daySeconds;
+    this.say(`Auftrag angenommen: „${j.place}“ in ${CONFIG.jobs.dueDays} Tagen sauber und abgenommen = ${j.bonus} CHF`, 'info');
+    return true;
+  }
+
+  declineJob(id) {
+    const j = this.jobs.find((x) => x.id === id && x.status === 'offer');
+    if (!j) return false;
+    this.jobs.splice(this.jobs.indexOf(j), 1);
+    this.say(`„${j.place}“ abgesagt. ${pick(XT.jobDeclined, this.rng)}`, 'info');
+    return true;
+  }
+
+  _jobs(dt) {
+    const J = CONFIG.jobs;
+    if (this.time >= this.nextJobAt) {
+      this.nextJobAt = this.time + this.rng.range(J.everyDays[0], J.everyDays[1]) * CONFIG.daySeconds;
+      if (this.jobs.length < J.maxOpen) this._offerJob();
+    }
+    this.jobCheck += dt;
+    const check = this.jobCheck >= 0.5;
+    if (check) this.jobCheck = 0;
+    for (const j of [...this.jobs]) {
+      if (j.status === 'offer') {
+        if (this.time >= j.offerExpiresAt) { this.jobs.splice(this.jobs.indexOf(j), 1); this.say(`„${j.place}“: ${pick(XT.jobLapsed, this.rng)}`, 'bad'); }
+        continue;
+      }
+      if (!check && this.time < j.dueAt) continue;
+      j.progress = this.lake.zoneStats(j.zone);
+      if (j.progress.cleaned >= J.cleanNeeded && j.progress.accepted >= J.acceptedNeeded) {
+        this.jobs.splice(this.jobs.indexOf(j), 1);
+        this.money += j.bonus; this.totals.jobsPaid += j.bonus; this.totals.jobsDone++;
+        const msg = `Auftrag „${j.place}“ erledigt (+${j.bonus} CHF). ${pick(XT.jobDone, this.rng)}`;
+        this.say(msg, 'good'); this.notify(msg, 'good');
+      } else if (this.time >= j.dueAt) {
+        this.jobs.splice(this.jobs.indexOf(j), 1);
+        const pen = Math.round((j.bonus * J.penaltyShare) / 100) * 100;
+        this.money -= pen; this.totals.jobsPenalty += pen; this.totals.jobsFailed++;
+        const msg = `Auftrag „${j.place}“ verpasst (−${pen} CHF). ${pick(XT.jobFailed, this.rng)}`;
+        this.say(msg, 'bad'); this.notify(msg, 'bad');
+      }
+    }
   }
 
   // Zeit läuft: Anlage, Tageswechsel, Spielende (Geld kommt nur durch abgesaugte m³)
@@ -163,6 +271,8 @@ export class Game {
     this.time += dt;
     this._plant(dt);
     this._claims();
+    this._finds();
+    this._jobs(dt);
     const day = Math.floor(this.time / CONFIG.daySeconds) + 1;
     while (this.day < day && this.status === 'playing') this._newDay();
     this.endCheck += dt;

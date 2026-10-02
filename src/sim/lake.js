@@ -1,4 +1,4 @@
-import { CONFIG, DEBRIS } from '../config.js';
+import { CONFIG, DEBRIS, FOSSILS } from '../config.js';
 
 // Seegrund als Raster (Zelle = cellArea m²).
 // - top:    aktuelle Oberfläche (Höhe über dem Felsgrund, in m)
@@ -20,6 +20,9 @@ export class Lake {
     this.initial = new Uint8Array(n); // 1 = Zelle gehörte zur abzutragenden Schicht
     this.accepted = new Uint8Array(n); // von der Drohne abgenommen
     this.flagged = new Uint8Array(n); // Drohne meldet Restschmutz
+    this.fossil = new Uint8Array(n); // 0 nichts, sonst Index in FOSSILS + 1 (liegt im Untergrund unter der Sollsohle)
+    this.fossilFound = new Uint8Array(n); // von der Drohne entdeckt
+    this.docBits = new Uint8Array(n); // Befliegungsdaten: 1 = vorher dokumentiert, 2 = nachher dokumentiert
     this.initialTotal = 0;
   }
 
@@ -66,6 +69,12 @@ export class Lake {
       const k = lake.idx(rng.int(0, lake.cols - 1), rng.int(0, lake.rows - 1));
       if (lake.mass[k] > 0 && !lake.debris[k]) { lake.debris[k] = rng.int(1, DEBRIS.length); n++; }
     }
+    for (let n = 0, tries = 0; n < CONFIG.fossils.count && tries < 2000; tries++) {
+      const k = lake.idx(rng.int(0, lake.cols - 1), rng.int(0, lake.rows - 1));
+      const inLayer = rng() < 0.6; // ein Teil liegt unter der bestellten Fläche (gefährdet), der Rest daneben (sicher)
+      if (lake.fossil[k] || (inLayer ? !lake.initial[k] : lake.initial[k])) continue;
+      lake.fossil[k] = rng.int(1, FOSSILS.length); n++;
+    }
     lake.initialTotal = lake.remaining();
     return lake;
   }
@@ -99,6 +108,22 @@ export class Lake {
     return this.initialTotal > 0 ? 1 - this.remaining() / this.initialTotal : 1;
   }
 
+  // Stand einer rechteckigen Zone (Zellen): wie viele bestellte Zellen, wie viel davon sauber / abgenommen, Restmenge in m³
+  zoneStats(z) {
+    let n = 0, cleaned = 0, accepted = 0, volume = 0;
+    for (let y = z.y; y < Math.min(this.rows, z.y + z.h); y++) {
+      for (let x = z.x; x < Math.min(this.cols, z.x + z.w); x++) {
+        const i = this.idx(x, y);
+        if (!this.initial[i]) continue;
+        n++;
+        volume += this.mass[i] * this.area;
+        if (this.mass[i] < CONFIG.drone.acceptMax) cleaned++;
+        if (this.accepted[i]) accepted++;
+      }
+    }
+    return { n, cleaned: n ? cleaned / n : 1, accepted: n ? accepted / n : 1, volume };
+  }
+
   // Zu tief abgetragen? (Oberfläche liegt unter der Sollsohle)
   overdug(i, tolerance = CONFIG.layer.tolerance) { return this.initial[i] === 1 && this.top[i] < this.target[i] - tolerance; }
 
@@ -107,8 +132,9 @@ export class Lake {
   // removed (gesamt), toxicRemoved (aus der belasteten Schicht), overdug (unter der Sollsohle).
   _drain(cells, amount) {
     let wSum = 0, removed = 0, toxicRemoved = 0, overdug = 0, hardRemoved = 0;
+    const fossilsLost = [];
     for (const c of cells) wSum += c[1];
-    if (wSum === 0) return { removed, toxicRemoved, overdug, hardRemoved };
+    if (wSum === 0) return { removed, toxicRemoved, overdug, hardRemoved, fossilsLost };
     for (const [i, w] of cells) {
       const above = this.mass[i]; // belastete Schicht über der Sollsohle
       let eff = 1 / (1 + this.hard[i] * CONFIG.hard.factor); // harte Schicht: weniger Leistung
@@ -129,11 +155,14 @@ export class Lake {
         if (this.toxic[i]) toxicRemoved += rest;
       }
       if (this.mass[i] === 0) { this.toxic[i] = 0; this.hard[i] = 0; }
+      if (this.fossil[i] && this.target[i] - this.top[i] > CONFIG.fossils.depthBelowTarget) { // zu tief gegraben: Fossil ist Kies
+        fossilsLost.push(this.fossil[i]); this.fossil[i] = 0; this.fossilFound[i] = 0;
+      }
     }
-    return { removed, toxicRemoved, overdug, hardRemoved };
+    return { removed, toxicRemoved, overdug, hardRemoved, fossilsLost };
   }
 
-  _vol(r) { return { removed: r.removed * this.area, toxicRemoved: r.toxicRemoved * this.area, overdug: r.overdug * this.area, hardRemoved: r.hardRemoved * this.area }; }
+  _vol(r) { return { removed: r.removed * this.area, toxicRemoved: r.toxicRemoved * this.area, overdug: r.overdug * this.area, hardRemoved: r.hardRemoved * this.area, fossilsLost: r.fossilsLost }; }
 
   // Draufsicht-Saugen um (cx, cy) – flächig, nur belastete Zellen. (Im Spiel zählt der Querschnitt.)
   suck(cx, cy, radius, amount) {

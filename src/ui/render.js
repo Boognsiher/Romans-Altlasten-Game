@@ -1,6 +1,9 @@
 // Zeichnet Karte und Querschnitt. Kennt keine Spiellogik, liest nur Zustand.
 import { SLICE } from '../sim/slice.js';
+import { CONFIG } from '../config.js';
 import { Chain, drawChain } from './chain.js';
+
+const CONFIG_FOSSIL_DEPTH = CONFIG.fossils.depthBelowTarget; // Fossilien liegen so tief unter der Sollsohle
 
 const chain = new Chain();
 let lastT = 0;
@@ -14,7 +17,7 @@ export function sizeMap(canvas, lake) { canvas.width = lake.cols * CELL; canvas.
 export function sizeSlice(canvas) { canvas.width = SLICE.cols * U; canvas.height = SLICE_TOP + SLICE.viewH * U + BEDROCK; }
 
 // ---------- Instanz 1: Karte ----------
-export function drawMap(ctx, lake, sim) {
+export function drawMap(ctx, lake, sim, jobs = []) {
   const { cols, rows, mass, toxic } = lake;
   ctx.fillStyle = '#12304a';
   ctx.fillRect(0, 0, cols * CELL, rows * CELL);
@@ -41,6 +44,19 @@ export function drawMap(ctx, lake, sim) {
       if (lake.overdug(i)) { ctx.fillStyle = 'rgba(255,170,0,.4)'; ctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
       if (lake.flagged[i]) { ctx.strokeStyle = '#ff5d4d'; ctx.lineWidth = 2; ctx.strokeRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4); }
     }
+  }
+  for (let y = 0; y < rows; y++) { // entdeckte Fossilien
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      if (lake.fossil[i] && lake.fossilFound[i]) { ctx.fillStyle = '#ffd24d'; ctx.beginPath(); ctx.arc(x * CELL + CELL / 2, y * CELL + CELL / 2, 4, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#5a4300'; ctx.lineWidth = 1; ctx.stroke(); }
+    }
+  }
+  for (const j of jobs) { // Zonen der Gemeinde: Angebot gestrichelt gelb, angenommener Auftrag durchgezogen cyan
+    const z = j.zone, active = j.status === 'active';
+    ctx.strokeStyle = active ? '#7fe3ff' : '#ffd24d'; ctx.lineWidth = 2; ctx.setLineDash(active ? [] : [8, 5]);
+    ctx.strokeRect(z.x * CELL + 1, z.y * CELL + 1, z.w * CELL - 2, z.h * CELL - 2); ctx.setLineDash([]);
+    ctx.fillStyle = active ? '#7fe3ff' : '#ffd24d'; ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillText(`${active ? 'Auftrag' : 'Angebot'}: ${j.place}`, z.x * CELL + 6, z.y * CELL + 16);
   }
   if (!sim) return;
   const px = sim.x * CELL, py = sim.y * CELL;
@@ -116,6 +132,15 @@ export function drawSlice(ctx, lake, sim) {
     ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.setLineDash([10, 5]); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#7fe3ff'; ctx.font = '13px system-ui, sans-serif';
     ctx.fillText(`Echolot: Ziel −${sl.cutDepth.toFixed(2)} m (punktiert = Messung)`, 12, SLICE_TOP + 18);
+  }
+  // Entdeckte Fossilien im Untergrund (Ammonit-Spirale)
+  for (let c = 0; c < SLICE.cols; c++) {
+    const i = col(c);
+    if (!lake.fossil[i] || !lake.fossilFound[i]) continue;
+    const cx = xs(c), cy = yOf(G(c) - CONFIG_FOSSIL_DEPTH);
+    ctx.strokeStyle = '#ffd24d'; ctx.lineWidth = 2; ctx.beginPath();
+    for (let a = 0; a < 9; a += 0.25) { const r = 1.5 + a * 1.4; (a ? ctx.lineTo : ctx.moveTo).call(ctx, cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+    ctx.stroke();
   }
   // Harte Schichten (dunkel) und Fremdstoffe (Rad)
   for (let c = 0; c < SLICE.cols; c++) {

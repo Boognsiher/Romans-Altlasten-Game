@@ -73,8 +73,25 @@ export const CONFIG = {
     hardThreshold: 50, hardPerM3: 80, // je 50 m³ harte Schicht, CHF pro m³ Mehraufwand
     toxicThreshold: 30, toxicFair: 5000, // je 30 m³ Altlasten (Fassfund), CHF
   },
-  // Tauchdrohne: Abnahme des gereinigten Seegrunds
-  drone: { fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9 }, // Restschlamm (m³) pro Zelle für eine Abnahme
+  // Fossilienfunde: liegen im festen Untergrund, die Drohne entdeckt sie, das Museum zahlt für die Bergung.
+  // Wer in der Übertiefung darüber saugt, zerstört sie (und zahlt eine Busse).
+  fossils: {
+    count: 14, depthBelowTarget: 0.5, // m unter der Sollsohle: so tief muss man schon graben, um sie zu zerstören
+    recoverFee: [400, 900], value: [2000, 6000], recoverSeconds: 30, // Bergung (CHF), Museumspreis (CHF), 2 Tage
+    destroyFine: 2500,
+  },
+  // Zusatzaufträge der Gemeinde: eine Zone des Sees bis zu einem Termin sauber und abgenommen = Prämie
+  jobs: {
+    firstAtDay: 20, everyDays: [22, 35], offerDays: 8, dueDays: 25, maxOpen: 3,
+    minInitialCells: 20, zoneW: [7, 10], zoneH: [5, 7],
+    bonusBase: 6000, bonusPerM3: 60, penaltyShare: 0.3, // verpasst: 30% der Prämie als Konventionalstrafe
+    cleanNeeded: 0.97, acceptedNeeded: 0.9,
+  },
+  // Tauchdrohne: Abnahme des gereinigten Seegrunds und Befliegungsdaten
+  drone: {
+    fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9, // Restschlamm (m³) pro Zelle für eine Abnahme
+    docPerCell: 8, // CHF, die die Behörde pro neu dokumentierter Zelle zahlt (vorher und nachher, je einmal)
+  },
   turbidityFineThreshold: 0.7,
   turbidityFinePerSecond: 400, // CHF/s über der Schwelle
 };
@@ -178,6 +195,12 @@ export const UPGRADES = {
     apply: (s, lvl) => { s.droneBattery += lvl * 15; s.droneRadius += lvl * 0.4; },
   },
 };
+
+// Fossilien im Untergrund (Index = Wert in lake.fossil - 1)
+export const FOSSILS = [
+  'Ammonit', 'Trilobit', 'Ichthyosaurier-Wirbel', 'Haizahn (gross)', 'Riesenmuschel', 'Saurier-Rippe',
+  'Plesiosaurier (oder ein Gartenschlauch)',
+];
 
 // Fremdstoffe im See (Index = Wert in lake.debris - 1)
 export const DEBRIS = [
