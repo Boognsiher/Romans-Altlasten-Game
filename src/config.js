@@ -3,7 +3,9 @@ export const CONFIG = {
   lake: { cols: 48, rows: 30, blobs: 22, toxicBlobs: 7 },
   // Das Spiel läuft in Echtzeit. Gewonnen hat, wer am Ende am meisten Geld hat.
   daySeconds: 15, // ein Spieltag in Sekunden (150 Tage = 37,5 Minuten)
-  incomePerSec: 250, // CHF pro Sekunde (laufende Finanzierung): 150 Tage ergeben ca. 560k CHF
+  // Vergütung pro abgesaugtem m³ belasteter Schicht (zu tief abgetragener Boden wird nicht bezahlt).
+  // Die Entsorgung kostet im Schnitt ca. 120 CHF/m³; der Rest ist deine Marge. Altlasten sind teurer in der Entsorgung, also besser bezahlt.
+  pay: { perM3: 260, toxicMultiplier: 1.5 },
   startMoney: 40000, // CHF
   deadlineDays: 150, // danach saniert eine Fremdfirma den Rest gegen Rechnung
   deadline: { externalCostPerM3: 380 }, // CHF pro m³ (Abtrag, Entsorgung und Abnahme zum Notfalltarif)
@@ -57,6 +59,20 @@ export const CONFIG = {
     defaultCut: 1.0, // gewünschte Abtragsdicke in m (= ganze belastete Schicht)
     minCut: 0.1, maxCut: 1.5,
   },
+  // Nachtragsmanagement: Vorkommnisse im See (Fremdstoffe, harte Schicht, Fässer) lassen sich beim Bauherrn als Zusatzleistung abrechnen.
+  // Je höher die Forderung gegenüber dem tatsächlichen Aufwand, desto unwahrscheinlicher die Genehmigung; Dokumentation hilft.
+  claims: {
+    maxOpen: 6, // so viele Entwürfe gleichzeitig; ältere verfallen
+    expireSeconds: 150, // 10 Tage: danach ist der Nachtrag verjährt
+    reviewSeconds: 30, // 2 Tage Prüfung durch den Bauherrn
+    fee: 200, // CHF Aufwand pro eingereichtem Nachtrag (Juristin, Kopierer, Kaffee)
+    minMarkup: 1.0, maxMarkup: 2.0, defaultMarkup: 1.2, // Forderung = Aufwand * Aufschlag
+    baseAccept: 0.95, markupPenalty: 0.6, // Chance = 95% - 60% * (Aufschlag - 1) + Dokumentation
+    partialBand: 0.2, partialShare: 0.5, // knapp daneben: der Bauherr zahlt die Hälfte
+    debris: [1000, 2500], // CHF Sonderentsorgung je Fremdstoff
+    hardThreshold: 50, hardPerM3: 80, // je 50 m³ harte Schicht, CHF pro m³ Mehraufwand
+    toxicThreshold: 30, toxicFair: 5000, // je 30 m³ Altlasten (Fassfund), CHF
+  },
   // Tauchdrohne: Abnahme des gereinigten Seegrunds
   drone: { fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9 }, // Restschlamm (m³) pro Zelle für eine Abnahme
   turbidityFineThreshold: 0.7,
@@ -74,6 +90,7 @@ export const BASE_STATS = {
   bufferCapacity: 150, // m³ Puffer vor der Anlage; ist er voll, muss das Saugen pausieren
   dewater: 0.6, // Volumenanteil nach der Entwässerung (kleiner = weniger Entsorgung)
   stability: 0.7, // Standfestigkeit der Pumpe: so viele m Abtragtiefe pro gefahrene Zelle verträgt sie, ohne zu kippen
+  docBonus: 0, // Dokumentation: erhöht die Chance, dass Nachträge genehmigt werden
   autoLevel: 0, // Automatik-Stufe des Saugkopfs
   echolot: 0, // Echolot-Stufe (0 = keins)
   droneBattery: 60, // Sekunden Flugzeit der Tauchdrohne
@@ -137,7 +154,7 @@ export const UPGRADES = {
     name: 'Echolot',
     desc: 'Lotet den Seegrund vor dem Abtrag aus: die Automatik fährt die gewünschte Abtragsdicke an (Stufe 2 misst genauer)',
     maxLevel: 2, baseCost: 12000, growth: 1.8,
-    apply: (s, lvl) => { s.echolot = lvl; },
+    apply: (s, lvl) => { s.echolot = lvl; s.docBonus += lvl * 0.04; }, // Messprotokolle zählen als Beleg
   },
   auto: {
     group: 'ponton',
@@ -145,6 +162,13 @@ export const UPGRADES = {
     desc: 'Stufe 1 experimentell (überwachen!), 2 zuverlässig, 3 voll',
     maxLevel: 3, baseCost: 15000, growth: 1.8,
     apply: (s, lvl) => { s.autoLevel = lvl; },
+  },
+  docs: {
+    group: 'office',
+    name: 'Baustellen-Dokumentation',
+    desc: 'Fotos, Lieferscheine, Messprotokolle: Nachträge werden eher genehmigt',
+    maxLevel: 3, baseCost: 5000, growth: 1.7,
+    apply: (s, lvl) => { s.docBonus += lvl * 0.08; },
   },
   drone: {
     group: 'drone',

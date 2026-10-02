@@ -7,6 +7,7 @@ import { DredgeSim } from '../src/sim/dredge.js';
 import { CONFIG } from '../src/config.js';
 import { computeStats } from '../src/sim/stats.js';
 import { Chain } from '../src/ui/chain.js';
+import { acceptChance, decide, claimedAmount, clampMarkup } from '../src/sim/claims.js';
 import { snapStick, steerToward, isTap } from '../src/ui/touch-logic.js';
 import { DroneSim } from '../src/sim/drone.js';
 import { classProbabilities, processBatch } from '../src/sim/plant.js';
@@ -95,7 +96,7 @@ test('Material geht in den Puffer, die Anlage verarbeitet es laufend und bezahlt
   for (let t = 0; t < 10; t += 0.1) g.update(0.1);
   assert.equal(g.totals.classes.E, 1); // Los = 0.5 -> Typ E
   assert.ok(g.totals.disposalPaid > CONFIG.plant.labFeePerBatch);
-  assert.ok(g.money < money + 40 * CONFIG.incomePerSec); // Entsorgung und Analyse sind abgebucht
+  assert.ok(g.money < money); // Entsorgung und Analyse sind abgebucht, die Zeit allein bringt kein Geld
 });
 
 test('Puffer voll: Pumpe pausiert', () => {
@@ -128,11 +129,25 @@ test('Charge: Klasse per Los, Kosten = entwässertes Volumen * Preis, Analysegeb
   assert.equal(processBatch(25, 0, stats, false, () => 0).cls, 'B');
 });
 
-test('Einkommen pro Sekunde, Spielzeit und Tageswechsel', () => {
+test('Geld gibt es pro abgesaugtem m³: Altlasten mit Zuschlag, Übertiefung unbezahlt, Zeit allein bringt nichts', () => {
   const g = quiet(new Game(5));
-  g.money = 0;
+  const m0 = g.money, P = CONFIG.pay;
+  g.collect({ removed: 10, toxicRemoved: 0, overdug: 0, fines: 0, repairs: 0, tips: 0, clogs: 0 });
+  assert.equal(g.money, m0 + 10 * P.perM3);
+  g.collect({ removed: 10, toxicRemoved: 10, overdug: 0, fines: 0, repairs: 0, tips: 0, clogs: 0 });
+  assert.equal(g.money, m0 + 10 * P.perM3 + 10 * P.perM3 * P.toxicMultiplier);
+  const m1 = g.money;
+  g.collect({ removed: 10, toxicRemoved: 0, overdug: 10, fines: 0, repairs: 0, tips: 0, clogs: 0 }); // alles zu tief
+  assert.equal(g.money, m1 - 10 * CONFIG.layer.overdigCostPerM3); // nichts vergütet, Übertiefung kostet
+  const m2 = g.money; g.stock = { normal: 0, toxic: 0 };
+  for (let i = 0; i < 100; i++) g.update(0.1);
+  assert.equal(g.money, m2); // 10 s ohne Abtrag: kein Einkommen
+  assert.equal(g.totals.pay, 10 * P.perM3 + 10 * P.perM3 * P.toxicMultiplier);
+});
+
+test('Spielzeit und Tageswechsel', () => {
+  const g = quiet(new Game(5));
   for (let i = 0; i < 100; i++) g.update(0.1); // 10 s
-  assert.ok(Math.abs(g.money - 10 * CONFIG.incomePerSec) < 1e-6);
   assert.ok(Math.abs(g.time - 10) < 1e-9);
   assert.equal(g.day, 1);
   for (let i = 0; i < Math.round((CONFIG.daySeconds - 10) * 10) + 3; i++) g.update(0.1);
@@ -165,7 +180,7 @@ test('Frist: nach 150 Tagen ist Schluss, eine Fremdfirma saniert den Rest, Endst
   assert.equal(g.end.reason, 'deadline');
   assert.equal(g.end.external, Math.round(remaining * CONFIG.deadline.externalCostPerM3));
   assert.equal(g.end.finalMoney, Math.round(g.money));
-  assert.ok(g.end.finalMoney < 1e7 + 2 * CONFIG.incomePerSec * 2);
+  assert.ok(g.end.finalMoney < 1e7);
   const frozen = g.money; g.update(5); assert.equal(g.money, frozen); // danach läuft nichts mehr
 });
 
@@ -178,14 +193,14 @@ test('Frist: reicht das Geld nicht, ist der Endstand negativ', () => {
   assert.ok(g.end.finalMoney < 0);
 });
 
-test('Früh fertig: Restmaterial wird entsorgt, Restfinanzierung gutgeschrieben', () => {
+test('Früh fertig: Restmaterial wird noch entsorgt, dann ist Schluss', () => {
   const g = quiet(new Game(10));
   g.lake.mass.fill(0); g.lake.accepted.fill(1);
   g.collect({ removed: 30, toxicRemoved: 0, overdug: 0, fines: 0, repairs: 0, tips: 0, clogs: 0 });
   g.update(0.6);
   assert.equal(g.status, 'ended');
   assert.equal(g.end.reason, 'early');
-  assert.equal(g.end.bonus, Math.round((g.totalSeconds - 0.6) * CONFIG.incomePerSec));
+  assert.equal(g.end.finalMoney, Math.round(g.money));
   assert.ok(g.stockTotal === 0 && g.batch.vol === 0); // alles entsorgt
   assert.equal(g.totals.classes.B + g.totals.classes.E + g.totals.classes.C, 2); // 30 m³ = Charge à 25 + Rest 5
 });
@@ -395,7 +410,8 @@ test('Übertiefung: kostet extra und geht trotzdem in den Puffer', () => {
   const money = g.money;
   g.collect({ removed: 20, toxicRemoved: 0, overdug: 10, fines: 0, repairs: 0, tips: 0, clogs: 0 });
   assert.equal(g.stockTotal, 20); // zu viel abgetragener Boden muss auch entsorgt werden
-  assert.equal(g.money, money - 10 * CONFIG.layer.overdigCostPerM3);
+  // 10 m³ belastet werden vergütet, 10 m³ Übertiefung kosten extra
+  assert.equal(g.money, money + 10 * CONFIG.pay.perM3 - 10 * CONFIG.layer.overdigCostPerM3);
   assert.equal(g.totals.overdug, 10);
   assert.equal(g.totals.overdigPaid, 10 * CONFIG.layer.overdigCostPerM3);
 });
@@ -551,4 +567,87 @@ test('Tippen auf die Karte führt bis zur Ankerposition und ankert (Simulation m
   assert.equal(arrived, true);
   assert.equal(sim.mode, 'slice');
   assert.ok(Math.hypot(sim.x - target.x, sim.y - target.y) <= 0.3 + 1e-6);
+});
+
+test('Nachtrag-Chance: sinkt mit dem Aufschlag, steigt mit Dokumentation, bleibt begrenzt', () => {
+  assert.ok(acceptChance(1.0) > acceptChance(1.5) && acceptChance(1.5) > acceptChance(2.0));
+  assert.ok(acceptChance(1.5, 0.2) > acceptChance(1.5, 0));
+  assert.ok(acceptChance(1.0, 5) <= 0.98 && acceptChance(2.0, -5) >= 0.05);
+  assert.equal(clampMarkup(0.5), CONFIG.claims.minMarkup);
+  assert.equal(clampMarkup(9), CONFIG.claims.maxMarkup);
+  assert.equal(claimedAmount(1000, 1.5), 1500);
+});
+
+test('Nachtrag-Entscheid: voll, hälftig, abgelehnt je nach Los', () => {
+  const p = acceptChance(1.5, 0);
+  assert.equal(decide(1.5, 0, p - 0.01), 'accepted');
+  assert.equal(decide(1.5, 0, p + CONFIG.claims.partialBand / 2), 'partial');
+  assert.equal(decide(1.5, 0, 0.999), 'rejected');
+});
+
+const ev = (extra) => ({ removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0, fines: 0, repairs: 0, tips: 0, clogs: 0, clogItems: [], ...extra });
+
+test('Vorkommnisse erzeugen Nachtrag-Entwürfe: Fremdstoff, harte Schicht, Fassfund', () => {
+  const g = quiet(new Game(31));
+  g.collect(ev({ clogs: 1, clogItems: ['Bürostuhl'] }));
+  assert.equal(g.claims.length, 1);
+  assert.equal(g.claims[0].kind, 'debris');
+  assert.ok(g.claims[0].text.includes('Bürostuhl'));
+  g.collect(ev({ hardRemoved: CONFIG.claims.hardThreshold - 1 }));
+  assert.equal(g.claims.length, 1); // noch nicht genug Mehraufwand
+  g.collect(ev({ hardRemoved: 1 }));
+  assert.equal(g.claims.length, 2);
+  assert.equal(g.claims[1].fair, CONFIG.claims.hardThreshold * CONFIG.claims.hardPerM3);
+  g.collect(ev({ removed: CONFIG.claims.toxicThreshold, toxicRemoved: CONFIG.claims.toxicThreshold }));
+  assert.equal(g.claims.length, 3);
+  assert.equal(g.claims[2].kind, 'toxic');
+  assert.equal(g.openClaims, 3);
+});
+
+test('Nachtrag einreichen: Gebühr, Prüfzeit, dann Auszahlung je nach Entscheid', () => {
+  const run = (roll) => {
+    const g = quiet(new Game(32)); g.rng = Object.assign(() => roll, { chance: () => false, range: (a) => a });
+    const c = g.addClaim('debris', 'Sonderentsorgung: Test', 2000);
+    g.setClaimMarkup(c.id, 1.5);
+    const m0 = g.money;
+    assert.equal(g.submitClaim(c.id), true);
+    assert.equal(g.submitClaim(c.id), false); // nur einmal
+    assert.equal(g.money, m0 - CONFIG.claims.fee);
+    for (let i = 0; i < 100; i++) g.update(0.1); // 10 s: noch in Prüfung
+    assert.equal(g.claims.length, 1);
+    for (let i = 0; i < Math.round(CONFIG.claims.reviewSeconds * 10); i++) g.update(0.1);
+    assert.equal(g.claims.length, 0);
+    return g.money - (m0 - CONFIG.claims.fee);
+  };
+  assert.equal(run(0.0), 3000); // genehmigt: 2000 * 1.5
+  assert.equal(run(acceptChance(1.5, 0) + 0.05), 1500); // hälftig
+  assert.equal(run(0.999), 0); // abgelehnt
+});
+
+test('Nachtrag verjährt, wenn er nicht rechtzeitig eingereicht wird; zu viele Entwürfe verdrängen den ältesten', () => {
+  const g = quiet(new Game(33));
+  g.addClaim('debris', 'alt', 1000);
+  for (let i = 0; i < Math.round(CONFIG.claims.expireSeconds * 10) + 5; i++) g.update(0.1);
+  assert.equal(g.claims.length, 0);
+  assert.equal(g.totals.claimsExpired, 1);
+  for (let i = 0; i < CONFIG.claims.maxOpen + 2; i++) g.addClaim('debris', `Nr ${i}`, 1000);
+  assert.equal(g.openClaims, CONFIG.claims.maxOpen);
+  assert.equal(g.claims[0].text, 'Nr 2'); // die zwei ältesten sind weg
+});
+
+test('Dokumentation (Upgrade, Echolot) erhöht die Chance in der Praxis', () => {
+  const g = quiet(new Game(34));
+  const base = g.stats.docBonus;
+  g.levels.docs = 3; g.levels.echolot = 2;
+  assert.ok(g.stats.docBonus > base + 0.3);
+  assert.ok(acceptChance(1.5, g.stats.docBonus) > acceptChance(1.5, base));
+});
+
+test('Harte Schicht: abgesaugtes Material aus harten Zellen wird als Mehraufwand gemeldet', () => {
+  const l = new Lake(4, 4); l.setFlat(2, 3);
+  const soft = l.suckProfile(1, 1.5, 3, 1.8, 2);
+  assert.equal(soft.hardRemoved, 0);
+  l.hard.fill(2);
+  const hard = l.suckProfile(1, 1.5, 3, 1.8, 2);
+  assert.ok(hard.hardRemoved > 0 && hard.hardRemoved <= hard.removed + 1e-9);
 });

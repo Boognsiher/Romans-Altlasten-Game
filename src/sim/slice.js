@@ -6,7 +6,7 @@ import { CONFIG, DEBRIS } from '../config.js';
 // Rückwärts wird nicht gesaugt; der Kopf muss zum Anfang zurückgezogen werden (schneller).
 export const SLICE = { cols: 16, viewH: 8, work: { x: 1, y: 1 }, returnBoost: 1.6 };
 
-const ZERO = { removed: 0, toxicRemoved: 0, overdug: 0 };
+const ZERO = { removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0 };
 
 const AUTO_ERRORS = [
   { id: 'stuck', text: 'Automatik hängt sich auf und starrt ins Wasser' },
@@ -37,7 +37,7 @@ export class SliceSim {
     this.notes = []; // Meldungen für die Oberfläche: { kind, text }
   }
 
-  say(kind, text) { this.notes.push({ kind, text }); }
+  say(kind, text, extra = {}) { this.notes.push({ kind, text, ...extra }); }
 
   surfaceAt(x) {
     const c = clamp(Math.floor(x), 0, this.lake.cols - 1);
@@ -180,7 +180,7 @@ export class SliceSim {
       this.lake.debris[di] = 0;
       this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : CONFIG.debris.clogSeconds;
       this.suctioning = false;
-      this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`);
+      this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`, { item: DEBRIS[d - 1] });
       return ZERO;
     }
     const res = this.lake.suckProfile(this.row, m.x, m.h, s.radius, s.power * dt);

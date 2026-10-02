@@ -1,6 +1,7 @@
 import { CONFIG, UPGRADES } from './config.js';
 import { Game } from './sim/game.js';
 import { classProbabilities } from './sim/plant.js';
+import { acceptChance, claimedAmount } from './sim/claims.js';
 import { createInput } from './ui/input.js';
 import { setupTouch } from './ui/touch.js';
 import { steerToward } from './ui/touch-logic.js';
@@ -31,7 +32,7 @@ const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoi
 
 // ---------- Panel (einmal aufgebaut, danach nur aktualisiert: Klicks gehen nie verloren) ----------
 const upRows = {};
-const groups = { plant: 'Anlage ausbauen', ponton: 'Ponton ausrüsten', drone: 'Abnahme' };
+const groups = { plant: 'Anlage ausbauen', ponton: 'Ponton ausrüsten', office: 'Büro & Nachträge', drone: 'Abnahme' };
 function buildUpgrades() {
   const nodes = [];
   for (const [g, title] of Object.entries(groups)) {
@@ -74,6 +75,56 @@ function updatePlant() {
   $('chk-oc').checked = game.overclock;
 }
 
+// ---------- Nachträge ----------
+let claimSig = null; // null = noch nie aufgebaut
+const claimRefs = {};
+function updateClaims() {
+  const sig = game.claims.map((c) => `${c.id}:${c.status}`).join(',');
+  const days = (t) => Math.max(0, Math.ceil((t - game.time) / CONFIG.daySeconds));
+  if (sig !== claimSig) { // nur neu aufbauen, wenn sich die Liste ändert (Regler bleiben beim Ziehen stabil)
+    claimSig = sig;
+    for (const k of Object.keys(claimRefs)) delete claimRefs[k];
+    const rows = game.claims.map((c) => {
+      const row = document.createElement('div'); row.className = `claim ${c.status}`;
+      const title = document.createElement('b'); title.textContent = c.text;
+      const info = document.createElement('small');
+      const line = document.createElement('div'); line.className = 'row';
+      const amt = document.createElement('span'); amt.className = 'amt';
+      const refs = { info, amt };
+      if (c.status === 'draft') {
+        const slider = document.createElement('input');
+        slider.type = 'range'; slider.min = CONFIG.claims.minMarkup; slider.max = CONFIG.claims.maxMarkup; slider.step = 0.05; slider.value = c.markup;
+        slider.oninput = () => { game.setClaimMarkup(c.id, parseFloat(slider.value)); updateClaims(); };
+        const btn = document.createElement('button');
+        btn.textContent = `Einreichen (−${CONFIG.claims.fee} CHF)`;
+        btn.onclick = () => { game.submitClaim(c.id); updatePanel(); };
+        line.append(slider, amt, btn);
+      } else line.append(amt);
+      row.append(title, info, line);
+      claimRefs[c.id] = refs;
+      return row;
+    });
+    if (!rows.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = 'Noch nichts Abrechenbares. Fremdstoffe, harte Schichten und Fässer lassen sich beim Bauherrn als Zusatzleistung verrechnen.';
+      rows.push(e);
+    }
+    $('claims').replaceChildren(...rows);
+  }
+  for (const c of game.claims) {
+    const r = claimRefs[c.id]; if (!r) continue;
+    if (c.status === 'draft') {
+      const chance = acceptChance(c.markup, game.stats.docBonus);
+      r.info.textContent = `Aufwand ${chf(c.fair)} · läuft ab in ${days(c.expiresAt)} Tagen`;
+      r.amt.textContent = `Forderung ${chf(claimedAmount(c.fair, c.markup))} · Chance ${pct(chance)}`;
+    } else {
+      r.info.textContent = `Der Bauherr prüft … noch ${days(c.resolveAt)} Tage`;
+      r.amt.textContent = `Forderung ${chf(c.claimed)}`;
+    }
+  }
+  $('panel-handle').textContent = (sheetOpen ? '▼ Schliessen (Spiel pausiert)' : '▲ Anlage & Ausrüstung') + (game.openClaims ? ` · ${game.openClaims} ${game.openClaims > 1 ? 'Nachträge' : 'Nachtrag'}` : '');
+}
+
 let logSig = '';
 function updateLog() {
   const sig = `${game.log.length}|${game.log[0]?.text}`;
@@ -91,14 +142,14 @@ function updateHud() {
   $('h-left').textContent = `(${mm}:${ss})`;
   $('h-money').textContent = chf(game.money);
   $('h-money').style.color = game.money < 0 ? 'var(--bad)' : '';
-  $('h-income').textContent = `+${CONFIG.incomePerSec} CHF/s`;
+  $('h-income').textContent = `(${CONFIG.pay.perM3} CHF/m³)`;
   $('h-clean').textContent = `${(game.lake.cleanFraction() * 100).toFixed(1)}%`;
   $('h-acc').textContent = `${(game.lake.acceptedFraction() * 100).toFixed(0)}%`;
   const best = loadBest();
   $('h-best').textContent = best === null ? '–' : chf(best);
 }
 
-function updatePanel() { updateUpgrades(); updatePlant(); updateLog(); $('btn-drone').textContent = `Drohne tauchen lassen (${chf(CONFIG.drone.fee)})`; }
+function updatePanel() { updateUpgrades(); updatePlant(); updateClaims(); updateLog(); $('btn-drone').textContent = `Drohne tauchen lassen (${chf(CONFIG.drone.fee)})`; }
 
 // ---------- Overlay, Toast ----------
 function showOverlay(html) { const o = $('overlay'); o.innerHTML = `<div>${html}</div>`; o.classList.add('show'); }
@@ -143,7 +194,7 @@ function togglePause() {
 function setSheet(open) {
   sheetOpen = open && narrow();
   $('panel').classList.toggle('open', sheetOpen);
-  $('panel-handle').textContent = sheetOpen ? '▼ Schliessen (Spiel pausiert)' : '▲ Anlage & Ausrüstung';
+  updateClaims();
 }
 
 function startDrone() {
@@ -167,7 +218,7 @@ function showEnd() {
   const title = { early: 'See saniert und abgenommen!', deadline: 'Frist abgelaufen', bankrupt: 'Projekt gestoppt' }[e.reason];
   showOverlay(`<h2>${title}</h2>
     <p>Endstand: <b>${chf(e.finalMoney)}</b>${record ? ' <b class="good">Neuer Rekord!</b>' : best !== null ? `<br><small>Rekord: ${chf(best)}</small>` : ''}</p>
-    <p><small>${e.bonus ? `Restfinanzierung +${chf(e.bonus)}<br>` : ''}${e.external ? `Fremdfirma für den Rest −${chf(e.external)}<br>` : ''}
+    <p><small>Vergütung insgesamt +${chf(t.pay)} · Nachträge +${chf(t.claimsPaid)} (${t.claimsAccepted} genehmigt, ${t.claimsPartial} hälftig, ${t.claimsRejected} abgelehnt, ${t.claimsExpired} verjährt)<br>${e.external ? `Fremdfirma für den Rest −${chf(e.external)}<br>` : ''}
     Abgesaugt ${t.removed.toFixed(0)} m³ · Chargen ${Object.entries(t.classes).map(([k, n]) => `${n}× ${k}`).join(', ')}<br>
     Entsorgung ${chf(t.disposalPaid)} · Bussen ${chf(t.finesPaid)} · Bergungen ${chf(t.repairsPaid)} · Übertiefung ${chf(t.overdigPaid)}</small></p>
     <p>Gewonnen hat, wer am Ende am meisten Geld hat.</p>
@@ -179,7 +230,7 @@ function restart() {
   game = new Game(); sim = game.createSession(); drone = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
-  setSheet(false); mapTarget = null;
+  setSheet(false); mapTarget = null; claimSig = null;
   hideOverlay(); syncMode(); updatePanel();
 }
 
@@ -255,6 +306,7 @@ function frame(now) {
       $('s-tilt').value = sim.mode === 'slice' ? sim.slice.tilt : 0;
     }
     game.update(dt);
+    for (const n of game.notes.splice(0)) toast(n.text, n.kind);
   }
   readInput.endFrame();
 
@@ -282,7 +334,7 @@ buildUpgrades();
 syncMode();
 updatePanel();
 showOverlay(`<h2>Seesanierung Uetikon</h2>
-  <p>Das Spiel läuft in <b>Echtzeit</b>: Jede Sekunde kommen ${CONFIG.incomePerSec} CHF Finanzierung herein, alles andere kostet. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
+  <p>Das Spiel läuft in <b>Echtzeit</b>: Für jeden abgesaugten m³ der belasteten Schicht gibt es ${CONFIG.pay.perM3} CHF (Altlasten ${Math.round(CONFIG.pay.perM3 * CONFIG.pay.toxicMultiplier)} CHF), zu tief abgetragener Boden wird nicht bezahlt. Entsorgung, Analyse, Bussen und Reparaturen kosten. Zusatzleistungen (Fremdstoffe, harte Schicht, Fässer) rechnest du als <b>Nachträge</b> beim Bauherrn ab: je höher die Forderung, desto unwahrscheinlicher die Genehmigung. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
   was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
   <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
     <p><b>Stick</b> links fährt (rastet auf eine Achse ein). Der grosse Knopf rechts wirft auf der Karte den Anker und saugt im Querschnitt, solange du ihn hältst. Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.

@@ -93,3 +93,14 @@ body.touch #shift-actions { flex-wrap: wrap; bottom: auto; top: 50px; left: 8px;
 #overlay summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 #overlay details p { margin: 6px 0; }
 @media (max-width: 860px) { #shift-hud progress { width: 80px; } }
+
+/* Nachtragsmanagement */
+#claims { font-size: 13px; }
+#claims .empty { color: var(--muted); }
+.claim { background: #ffffff0d; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.claim b { display: block; font-weight: 600; }
+.claim small { color: var(--muted); display: block; }
+.claim .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.claim input[type=range] { flex: 1 1 110px; min-width: 90px; }
+.claim .amt { font-variant-numeric: tabular-nums; }
+.claim.submitted { opacity: .8; }

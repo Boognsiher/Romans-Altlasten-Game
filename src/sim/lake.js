@@ -106,9 +106,9 @@ export class Lake {
   // Der feste Untergrund unter der Sollsohle geht nur mit groundFirmness. Gibt Höhen zurück:
   // removed (gesamt), toxicRemoved (aus der belasteten Schicht), overdug (unter der Sollsohle).
   _drain(cells, amount) {
-    let wSum = 0, removed = 0, toxicRemoved = 0, overdug = 0;
+    let wSum = 0, removed = 0, toxicRemoved = 0, overdug = 0, hardRemoved = 0;
     for (const c of cells) wSum += c[1];
-    if (wSum === 0) return { removed, toxicRemoved, overdug };
+    if (wSum === 0) return { removed, toxicRemoved, overdug, hardRemoved };
     for (const [i, w] of cells) {
       const above = this.mass[i]; // belastete Schicht über der Sollsohle
       let eff = 1 / (1 + this.hard[i] * CONFIG.hard.factor); // harte Schicht: weniger Leistung
@@ -121,6 +121,7 @@ export class Lake {
       this.mass[i] = Math.max(0, this.top[i] - this.target[i]);
       removed += take; overdug += Math.max(0, depth() - tol) - overBefore; // erst tiefer als die Toleranz zählt
       if (this.toxic[i]) toxicRemoved += fromLayer;
+      if (this.hard[i]) hardRemoved += fromLayer; // Mehraufwand durch harte Schicht (Grundlage für Nachträge)
       if (this.mass[i] > 0 && this.mass[i] < 0.01) { // winziger Rest: gilt als erledigt
         const rest = this.mass[i];
         this.top[i] = this.target[i]; this.mass[i] = 0;
@@ -129,10 +130,10 @@ export class Lake {
       }
       if (this.mass[i] === 0) { this.toxic[i] = 0; this.hard[i] = 0; }
     }
-    return { removed, toxicRemoved, overdug };
+    return { removed, toxicRemoved, overdug, hardRemoved };
   }
 
-  _vol(r) { return { removed: r.removed * this.area, toxicRemoved: r.toxicRemoved * this.area, overdug: r.overdug * this.area }; }
+  _vol(r) { return { removed: r.removed * this.area, toxicRemoved: r.toxicRemoved * this.area, overdug: r.overdug * this.area, hardRemoved: r.hardRemoved * this.area }; }
 
   // Draufsicht-Saugen um (cx, cy) – flächig, nur belastete Zellen. (Im Spiel zählt der Querschnitt.)
   suck(cx, cy, radius, amount) {
