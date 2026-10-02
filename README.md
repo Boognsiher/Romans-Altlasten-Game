@@ -35,8 +35,16 @@ Spielregeln (Stand):
 
 Prinzip: `src/sim/` kennt weder DOM noch Canvas und ist getestet.
 
-## Steuerung
+## Steuerung (Computer)
 Karte: WASD/Pfeile (oder Maus gedrückt) fahren, E/Leertaste Anker werfen. Querschnitt: A/D/W/S Saugkopf, Leertaste/Klick saugen, Q zurück zur Karte.
 
 ## Ideen für später
 Balancing (alle Zahlen in `src/config.js`), Speichern (localStorage), Sound, Ereignisse mit Entscheidungen, Touch-Steuerung, Fossilienschicht als Bonus.
+
+## Steuerung (Handy)
+- **Stick links** (rastet auf vier Richtungen ein, Hysterese gegen Flackern): fährt den Ponton bzw. Katze und Kette.
+- **Grosser Knopf rechts:** Karte = Anker werfen, Querschnitt = Saugen, solange er gehalten wird. Stick und Knopf laufen unabhängig (Mehrfinger).
+- **Tipp auf die Karte:** Ponton fährt hin und wirft dort den Anker.
+- **Oben:** Zurück zur Karte, Automatik, Reset, Abtrag-Regler; rechts oben die Pause.
+- **Shop als Fach unten:** Solange es offen ist, steht das Spiel still. Hochkant liegen HUD und Knöpfe unter dem Spielfeld, im Querformat Stick/Knopf an den Seiten.
+- Logik in `src/ui/touch-logic.js` (getestet), DOM in `src/ui/touch.js`. Bisher nur im emulierten Handy-Browser getestet, nicht auf einem echten Gerät.

@@ -2,6 +2,8 @@ import { CONFIG, UPGRADES } from './config.js';
 import { Game } from './sim/game.js';
 import { classProbabilities } from './sim/plant.js';
 import { createInput } from './ui/input.js';
+import { setupTouch } from './ui/touch.js';
+import { steerToward } from './ui/touch-logic.js';
 import { CELL, drawDrone, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
@@ -22,6 +24,10 @@ let endShown = false;
 const readInput = createInput(canvas);
 sizeMap(canvas, game.lake);
 let shownSize = 'map';
+let mapTarget = null; // Ziel, das per Tippen auf die Karte gesetzt wurde (Zellen): dorthin fahren und Anker werfen
+let sheetOpen = false; // Shop als Bottom-Sheet auf schmalen Bildschirmen: offen = Spiel pausiert
+const narrow = () => matchMedia('(max-width: 860px)').matches;
+const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 
 // ---------- Panel (einmal aufgebaut, danach nur aktualisiert: Klicks gehen nie verloren) ----------
 const upRows = {};
@@ -129,7 +135,16 @@ function setCut(v) {
   game.cutDepth = sim.cutDepth;
   $('cut').value = sim.cutDepth; $('cut-val').textContent = `${sim.cutDepth.toFixed(2)} m`;
 }
-function togglePause() { paused = !paused; $('btn-pause').textContent = paused ? '▶ Weiter (P)' : '⏸ Pause (P)'; }
+function togglePause() {
+  paused = !paused;
+  $('btn-pause').textContent = paused ? '▶ Weiter (P)' : '⏸ Pause (P)';
+  $('btn-pause2').textContent = paused ? '▶' : '⏸';
+}
+function setSheet(open) {
+  sheetOpen = open && narrow();
+  $('panel').classList.toggle('open', sheetOpen);
+  $('panel-handle').textContent = sheetOpen ? '▼ Schliessen (Spiel pausiert)' : '▲ Anlage & Ausrüstung';
+}
 
 function startDrone() {
   if (sim.mode !== 'map' || drone) return;
@@ -164,11 +179,22 @@ function restart() {
   game = new Game(); sim = game.createSession(); drone = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
+  setSheet(false); mapTarget = null;
   hideOverlay(); syncMode(); updatePanel();
 }
 
 $('btn-drone').onclick = startDrone;
 $('btn-pause').onclick = togglePause;
+$('btn-pause2').onclick = togglePause;
+$('panel-handle').onclick = () => setSheet(!sheetOpen);
+addEventListener('resize', () => { if (sheetOpen && !narrow()) setSheet(false); });
+
+// Touch: Stick, Aktionsknopf, Tippen auf die Karte
+const touch = isTouch ? setupTouch(readInput, { anchor }) : null;
+readInput.onTap((px, py) => {
+  if (drone || sim.mode !== 'map' || paused || sheetOpen || overlayOpen()) return;
+  mapTarget = { x: Math.min(sim.lake.cols, Math.max(0, px / CELL)), y: Math.min(sim.lake.rows, Math.max(0, py / CELL)) };
+});
 $('btn-anchor').onclick = anchor;
 $('btn-leave').onclick = leave;
 $('btn-auto').onclick = toggleAuto;
@@ -181,7 +207,8 @@ let last = performance.now(), panelTimer = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (readInput.tap('KeyP')) togglePause();
-  const running = !paused && !overlayOpen() && game.status === 'playing';
+  const running = !paused && !sheetOpen && !overlayOpen() && game.status === 'playing';
+  touch?.setMode(currentMode());
 
   if (running) {
     if (drone) {
@@ -195,6 +222,13 @@ function frame(now) {
       const inp = readInput.read(cur, { holdToMove: true });
       if (inMap) {
         inp.suction = false; // in der Karte wird nicht gesaugt
+        if (mapTarget) { // Tippen auf die Karte: hinfahren und dort ankern; Stick oder Tasten brechen ab
+          if (Math.abs(inp.dx) + Math.abs(inp.dy) > 0.1) mapTarget = null;
+          else {
+            const st = steerToward(sim, mapTarget);
+            if (st.arrived) { mapTarget = null; anchor(); } else { inp.dx = st.dx; inp.dy = st.dy; }
+          }
+        }
         if (readInput.tap('Space', 'Enter', 'KeyE')) anchor();
       } else {
         if (readInput.tap('Escape', 'KeyQ')) leave();
@@ -229,8 +263,18 @@ function frame(now) {
   updateHud();
   if (game.status === 'ended' && !endShown) { updatePanel(); showEnd(); }
 
+  if (sim.mode !== 'map' || drone) mapTarget = null;
   if (!drone && sim.mode === 'slice') drawSlice(ctx, game.lake, sim);
-  else { drawMap(ctx, game.lake, drone ? null : sim); if (drone) drawDrone(ctx, drone); }
+  else {
+    drawMap(ctx, game.lake, drone ? null : sim);
+    if (drone) drawDrone(ctx, drone);
+    else if (mapTarget) { // Ziel-Markierung
+      ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.beginPath();
+      ctx.arc(mapTarget.x * CELL, mapTarget.y * CELL, 10, 0, Math.PI * 2);
+      ctx.moveTo(mapTarget.x * CELL - 14, mapTarget.y * CELL); ctx.lineTo(mapTarget.x * CELL + 14, mapTarget.y * CELL);
+      ctx.moveTo(mapTarget.x * CELL, mapTarget.y * CELL - 14); ctx.lineTo(mapTarget.x * CELL, mapTarget.y * CELL + 14); ctx.stroke();
+    }
+  }
   requestAnimationFrame(frame);
 }
 
@@ -240,12 +284,16 @@ updatePanel();
 showOverlay(`<h2>Seesanierung Uetikon</h2>
   <p>Das Spiel läuft in <b>Echtzeit</b>: Jede Sekunde kommen ${CONFIG.incomePerSec} CHF Finanzierung herein, alles andere kostet. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
   was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
-  <p>Fahre auf der <b>Karte</b> mit dem Ponton (WASD / Pfeile, Maus gedrückt) an eine Stelle und wirf den Anker (<b>E</b> / Leertaste).
-  Im <b>Querschnitt</b> hängt die Pumpe an einer Kette am Ponton: A/D fährt sie seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse). Ohne Eingabe schwebt sie.
-  Der Einsaugbereich liegt unten rechts, deshalb saugt sie mit gehaltener <b>Leertaste</b> / Mausklick nur nach rechts. Gräbst du zu tief, kippt sie um.
-  <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Automatik-Reset, <b>P</b> Pause. Mit dem <b>Echolot</b> fährt die Automatik die eingestellte Abtragsdicke an (Regler oder F/G).</p>
-  <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
-  Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Zum Schluss nimmt die <b>Tauchdrohne</b> den Seegrund ab.</p>
+  <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
+    <p><b>Stick</b> links fährt (rastet auf eine Achse ein). Der grosse Knopf rechts wirft auf der Karte den Anker und saugt im Querschnitt, solange du ihn hältst. Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
+    Oben links stehen Zurück zur Karte, Automatik und Reset, oben rechts die Pause. Der Shop liegt unten im Fach „Anlage &amp; Ausrüstung“; solange es offen ist, steht das Spiel still.</p></details>
+  <details ${isTouch ? '' : 'open'}><summary>Steuerung am Computer</summary>
+    <p>Karte: WASD / Pfeile (oder Maus gedrückt) fahren, <b>E</b> / Leertaste wirft den Anker. Querschnitt: A/D fährt die Pumpe seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse), Leertaste / Mausklick saugt, nur nach rechts.
+    <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>P</b> Pause.</p></details>
+  <details><summary>Regeln im See</summary>
+    <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, der Rückweg saugt nicht. Gräbst du zu tief, kippt sie um.</p>
+    <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
+    Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Zum Schluss nimmt die <b>Tauchdrohne</b> den Seegrund ab.</p></details>
   <button class="primary" id="btn-go">Los</button>`);
 $('btn-go').onclick = hideOverlay;
 requestAnimationFrame(frame);

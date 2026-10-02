@@ -7,6 +7,7 @@ import { DredgeSim } from '../src/sim/dredge.js';
 import { CONFIG } from '../src/config.js';
 import { computeStats } from '../src/sim/stats.js';
 import { Chain } from '../src/ui/chain.js';
+import { snapStick, steerToward, isTap } from '../src/ui/touch-logic.js';
 import { DroneSim } from '../src/sim/drone.js';
 import { classProbabilities, processBatch } from '../src/sim/plant.js';
 
@@ -505,4 +506,49 @@ test('Abtragsdicke: Sollwert wird begrenzt und gilt für den laufenden Querschni
   assert.ok(Math.abs(sim.slice.targetAt(3) - (sim.slice.sounding[3] - 0.5)) < 1e-9);
   sim.setCutDepth(99); assert.equal(sim.cutDepth, CONFIG.echolot.maxCut);
   sim.setCutDepth(-1); assert.equal(sim.cutDepth, CONFIG.echolot.minCut);
+});
+
+test('Touch-Stick: Totzone, Einrasten auf eine Achse, kein Flackern bei Diagonalen', () => {
+  assert.deepEqual(snapStick(5, 5), { dx: 0, dy: 0 });
+  assert.deepEqual(snapStick(30, 4), { dx: 1, dy: 0 });
+  assert.deepEqual(snapStick(-30, 4), { dx: -1, dy: 0 });
+  assert.deepEqual(snapStick(4, 30), { dx: 0, dy: 1 });
+  assert.deepEqual(snapStick(4, -30), { dx: 0, dy: -1 });
+  // Diagonale: bleibt auf der bisherigen Achse, solange die andere nicht klar stärker ist
+  assert.deepEqual(snapStick(30, 36, 14, { dx: 1, dy: 0 }), { dx: 1, dy: 0 });
+  assert.deepEqual(snapStick(30, 36, 14, { dx: 0, dy: 1 }), { dx: 0, dy: 1 });
+  assert.deepEqual(snapStick(20, 40, 14, { dx: 1, dy: 0 }), { dx: 0, dy: 1 }); // klar vertikal: wechselt
+  // immer genau eine Achse
+  for (let a = 0; a < 360; a += 7) {
+    const r = snapStick(Math.cos(a / 57.3) * 40, Math.sin(a / 57.3) * 40);
+    assert.ok(Math.abs(r.dx) + Math.abs(r.dy) === 1);
+  }
+});
+
+test('Tippen auf die Karte: Fahrtrichtung zum Ziel, Ankunft', () => {
+  const s = steerToward({ x: 2, y: 2 }, { x: 5, y: 6 });
+  assert.equal(s.arrived, false);
+  assert.ok(Math.abs(Math.hypot(s.dx, s.dy) - 1) < 1e-9);
+  assert.ok(s.dx > 0 && s.dy > 0);
+  assert.equal(steerToward({ x: 5, y: 6 }, { x: 5.1, y: 6.1 }).arrived, true);
+});
+
+test('Tippen oder Ziehen', () => {
+  assert.equal(isTap(3, 120), true);
+  assert.equal(isTap(40, 120), false); // gezogen
+  assert.equal(isTap(3, 900), false); // gehalten
+});
+
+test('Tippen auf die Karte führt bis zur Ankerposition und ankert (Simulation mit steerToward)', () => {
+  const g = new Game(30); const sim = g.createSession();
+  const target = { x: 20, y: 12 };
+  let arrived = false;
+  for (let i = 0; i < 2000 && !arrived; i++) {
+    const st = steerToward(sim, target);
+    if (st.arrived) { arrived = sim.anchor(); break; }
+    sim.update(0.05, { dx: st.dx, dy: st.dy });
+  }
+  assert.equal(arrived, true);
+  assert.equal(sim.mode, 'slice');
+  assert.ok(Math.hypot(sim.x - target.x, sim.y - target.y) <= 0.3 + 1e-6);
 });

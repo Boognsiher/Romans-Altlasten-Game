@@ -32,3 +32,64 @@ button#btn-drone, button#btn-wait { width:100%; margin-top:6px; }
 #cut-box { display:flex; align-items:center; gap:6px; background:#000a; padding:4px 10px; border-radius:6px; } #cut-box input { width:120px; }
 #hud small { color:var(--muted); } button#btn-pause { width:100%; margin-top:6px; }
 #cut-box[hidden], #shift-actions button[hidden] { display:none; }
+
+/* ---------- Touch & kleine Bildschirme ---------- */
+button { touch-action: manipulation; }
+#stage { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#touch-ui[hidden], #btn-pause2, #panel-handle { display: none; }
+#touch-ui { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 20px; }
+#stick { position: relative; width: 132px; height: 132px; border-radius: 50%; background: #ffffff12; border: 2px solid #ffffff30; touch-action: none; flex: none; }
+#stick::before, #stick::after { content: ''; position: absolute; background: #ffffff22; }
+#stick::before { left: 50%; top: 10px; bottom: 10px; width: 2px; transform: translateX(-1px); }
+#stick::after { top: 50%; left: 10px; right: 10px; height: 2px; transform: translateY(-1px); }
+#knob { position: absolute; left: 38px; top: 38px; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); opacity: .9; pointer-events: none; }
+#act { width: 160px; height: 100px; border-radius: 50px; font-size: 19px; margin: 0; touch-action: none; }
+#act.held { background: #7fe3ff; box-shadow: 0 0 0 6px #7fe3ff55; }
+body.touch #btn-pause2 { display: block; position: absolute; top: 8px; right: 8px; z-index: 5; width: 48px; height: 48px; padding: 0; font-size: 20px; border-radius: 50%; }
+body.touch button { min-height: 44px; }
+body.touch #shift-actions button { padding: 10px 14px; }
+body.touch #shift-actions { flex-wrap: wrap; bottom: auto; top: 50px; left: 8px; right: 64px; }
+
+@media (max-width: 860px) {
+  body { padding-bottom: 56px; }
+  main { padding: 8px; gap: 8px; }
+  header { padding: 8px 12px; }
+  #stage { position: relative; top: auto; }
+  header h1 { font-size: 15px; }
+  #hud { gap: 2px 12px; font-size: 13px; flex-wrap: wrap; }
+  #hud span { white-space: nowrap; }
+  #panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 74vh; overflow: auto; border-radius: 14px 14px 0 0;
+           box-shadow: 0 -6px 24px #000a; transform: translateY(calc(100% - 52px)); transition: transform .2s ease; padding-top: 0; }
+  #panel.open { transform: none; }
+  #panel-handle { display: block; position: sticky; top: 0; width: 100%; min-height: 52px; margin: 0; border-radius: 14px 14px 0 0; background: #1d3650; font-weight: 600; z-index: 1; }
+  canvas { max-height: calc(100vh - 330px); }
+  /* HUD und Aktionsknöpfe unter dem Spielfeld statt darüber, damit der Ponton frei bleibt */
+  #shift-hud { position: static; display: flex; flex-wrap: wrap; gap: 4px 12px; background: none; padding: 6px 4px 0; font-size: 13px; border-radius: 0; }
+  #shift-hud[hidden], #shift-actions[hidden] { display: none; }
+  #shift-actions { position: static; flex-wrap: wrap; margin: 6px 0 0; }
+  #toast { top: 8px; right: 64px; }
+  body.touch #btn-pause2 { width: 44px; height: 44px; }
+}
+@media (max-width: 860px) and (max-height: 720px) {
+  #touch-ui { padding: 6px 16px; }
+  #stick { width: 108px; height: 108px; } #knob { left: 26px; top: 26px; width: 56px; height: 56px; }
+  #act { height: 84px; }
+}
+@media (max-width: 860px) and (orientation: landscape) and (max-height: 560px) {
+  #touch-ui { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 14px; pointer-events: none; }
+  #touch-ui > * { pointer-events: auto; opacity: .85; }
+  #stick { width: 112px; height: 112px; } #knob { left: 28px; top: 28px; }
+  #act { width: 130px; height: 84px; }
+  canvas { max-height: calc(100vh - 125px); }
+  body.touch #shift-actions { position: absolute; top: 8px; left: 8px; right: 64px; bottom: auto; margin: 0; }
+  #shift-hud { position: absolute; top: auto; bottom: 8px; left: 50%; transform: translateX(-50%); background: #000a; border-radius: 6px; padding: 4px 10px; }
+}
+
+/* Overlays (Intro, Spielende) als Vollbild-Dialog: scrollbar, Knopf bleibt erreichbar */
+#overlay { position: fixed; inset: 0; z-index: 30; overflow-y: auto; align-items: flex-start; padding: 16px; background: #000d; }
+#overlay > div { margin: auto; max-width: 460px; }
+#overlay .primary { position: sticky; bottom: 8px; width: 100%; }
+#overlay details { text-align: left; margin: 8px 0; font-size: 14px; background: #ffffff0d; border-radius: 8px; padding: 6px 12px; }
+#overlay summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+#overlay details p { margin: 6px 0; }
+@media (max-width: 860px) { #shift-hud progress { width: 80px; } }
