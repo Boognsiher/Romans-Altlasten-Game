@@ -15,7 +15,7 @@ const AUTO_ERRORS = [
 ];
 
 export class SliceSim {
-  constructor(lake, stats, mapX, row, rng = Math.random, cutDepth = CONFIG.echolot.defaultCut) {
+  constructor(lake, stats, mapX, row, rng = Math.random, cutDepth = CONFIG.echolot.defaultCut, speedSetting = CONFIG.pumpSpeed.default) {
     this.lake = lake;
     this.stats = stats;
     this.rng = rng;
@@ -25,6 +25,7 @@ export class SliceSim {
     this.h = Math.min(SLICE.viewH, this.surfaceAt(this.x) + 1.5); // Pumpenhöhe über Grund: schwebt, bis man sie verstellt
     this.suctioning = false;
     this.moving = false;
+    this.speedSetting = speedSetting; // Tempo-Regler: Anteil des Höchsttempos (Katze und Winde)
     this.cutDepth = cutDepth; // gewünschte Abtragsdicke (m) für die Automatik mit Echolot
     this.sounding = null; // Echolot: gemessene Oberfläche je Spalte vor dem Abtrag (m)
     if (stats.echolot > 0) this.sound();
@@ -154,13 +155,13 @@ export class SliceSim {
     const along = dx * SLICE.work.x + dy * SLICE.work.y; // >0: in Arbeitsrichtung
     const working = !!ctl.suction && !clogged && !this.blocked && along > 0.05;
     const af = a.on ? CONFIG.auto.speedFactor[lvl] : 1;
-    const speed = s.speed * 1.2 * af * (working ? s.suctionSpeedFactor : along < -0.05 ? SLICE.returnBoost : 1);
+    const speed = s.headSpeed * this.speedSetting * af * (working ? s.suctionSpeedFactor : along < -0.05 ? SLICE.returnBoost : 1);
 
     const oldX = this.x;
     this.x = clamp(this.x + dx * speed * dt, this.x0, this.x0 + SLICE.cols - P.offsetX - 1e-6);
     this.h -= dy * speed * dt; // die Pumpe schwebt: nur die Kette (W/S) ändert die Höhe
     if (a.on && !a.error && this.tilt <= 0.5) { // Automatik regelt die Höhe selbst; Stufe 1 schwebt etwas zu hoch
-      const v = s.speed * 1.2 * af * 0.8, target = this.surfaceAt(this.x) + (lvl === 1 ? 0.4 : 0);
+      const v = s.headSpeed * this.speedSetting * af * 0.8, target = this.surfaceAt(this.x) + (lvl === 1 ? 0.4 : 0);
       this.h += clamp(target - this.h, -v * dt, v * dt);
     }
     this.h = Math.max(this.surfaceAt(this.x), Math.min(this.h, SLICE.viewH)); // nicht in den Grund

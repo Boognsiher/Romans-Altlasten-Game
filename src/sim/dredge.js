@@ -13,6 +13,7 @@ export class DredgeSim {
     this.rng = rng;
     this.notes = []; // Meldungen aus dem Querschnitt (Verstopfung, Automatik ...)
     this.cutDepth = CONFIG.echolot.defaultCut; // gewünschte Abtragsdicke der Automatik (m)
+    this.pumpSpeed = CONFIG.pumpSpeed.default; // Tempo-Regler der Pumpe (Anteil des Höchsttempos)
     this.bufferRoom = Infinity; // so viel m³ passen noch in den Puffer vor der Anlage (setzt das Game)
     this.mode = 'map';
     this.slice = null;
@@ -35,7 +36,7 @@ export class DredgeSim {
   // Anker werfen: Querschnitt an der aktuellen Position öffnen
   anchor() {
     if (this.mode !== 'map') return false;
-    this.slice = new SliceSim(this.lake, this.stats, this.x, this.row, this.rng, this.cutDepth);
+    this.slice = new SliceSim(this.lake, this.stats, this.x, this.row, this.rng, this.cutDepth, this.pumpSpeed);
     this.mode = 'slice';
     return true;
   }
@@ -51,6 +52,12 @@ export class DredgeSim {
   setCutDepth(v) {
     this.cutDepth = Math.min(CONFIG.echolot.maxCut, Math.max(CONFIG.echolot.minCut, v));
     if (this.slice) this.slice.cutDepth = this.cutDepth;
+  }
+
+  setPumpSpeed(v) {
+    const P = CONFIG.pumpSpeed;
+    this.pumpSpeed = Math.min(P.max, Math.max(P.min, v));
+    if (this.slice) this.slice.speedSetting = this.pumpSpeed;
   }
 
   toggleAuto() { return this.mode === 'slice' && this.slice.toggleAuto(); }
@@ -80,11 +87,11 @@ export class DredgeSim {
       if (this.slice.suctioning) {
         // Aufgewirbelter Schlamm: mehr Leistung, Bewegung und Altlasten -> mehr Trübung
         const boost = (this.slice.moving ? 1.4 : 1) * (r.toxicRemoved > 0 ? 1.5 : 1);
-        this.turbidity += (s.power / 20) * boost * (1 - s.curtain) * dt;
+        this.turbidity += (s.power / CONFIG.turbidityGain) * boost * (1 - s.curtain) * dt;
       }
     }
 
-    this.turbidity = clamp(this.turbidity - 0.04 * dt, 0, 1);
+    this.turbidity = clamp(this.turbidity - CONFIG.turbidityDecay * dt, 0, 1);
     if (this.turbidity > CONFIG.turbidityFineThreshold) d.fines = CONFIG.turbidityFinePerSecond * dt;
 
     this.removed += d.removed; this.toxicRemoved += d.toxicRemoved; this.overdug += d.overdug;

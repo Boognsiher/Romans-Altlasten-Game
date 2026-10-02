@@ -24,5 +24,5 @@ export function processBatch(vol, toxicShare, stats, overclock, rng) {
   const disposalVol = vol * stats.dewater;
   const cls = pickClass(rng, classProbabilities(toxicShare, overclock));
   const cost = Math.round((disposalVol * P.classes[cls].price) / 10) * 10;
-  return { vol, disposalVol, cls, cost, lab: P.labFeePerBatch };
+  return { vol, disposalVol, cls, cost, lab: Math.round(P.labFeePerBatch * Math.max(0.2, vol / P.batchSize)) };
 }

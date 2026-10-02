@@ -104,3 +104,16 @@ body.touch #shift-actions { flex-wrap: wrap; bottom: auto; top: 50px; left: 8px;
 .claim input[type=range] { flex: 1 1 110px; min-width: 90px; }
 .claim .amt { font-variant-numeric: tabular-nums; }
 .claim.submitted { opacity: .8; }
+
+/* Pfeil-Knöpfe für die Pumpe (Handy, Querschnitt) und Tempo-Regler */
+#dpad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 58px); gap: 6px; flex: none; }
+#dpad[hidden] { display: none; }
+#dpad .dp { margin: 0; padding: 0; font-size: 22px; border-radius: 14px; background: #24415c; touch-action: none; min-height: 0; }
+#dpad .dp:active, #dpad .dp.held { background: var(--accent); color: #04222b; }
+#dpad .up { grid-column: 2; grid-row: 1; } #dpad .left { grid-column: 1; grid-row: 2; }
+#dpad .right { grid-column: 3; grid-row: 2; } #dpad .down { grid-column: 2; grid-row: 3; }
+#spd-box, #cut-box { display: flex; align-items: center; gap: 6px; background: #000a; padding: 4px 10px; border-radius: 6px; }
+#spd-box input { width: 110px; }
+#spd-box[hidden] { display: none; }
+@media (max-width: 860px) and (orientation: landscape) and (max-height: 560px) { #dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); gap: 4px; } }
+#dpad .dp { font-size: 30px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; }

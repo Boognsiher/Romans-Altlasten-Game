@@ -34,6 +34,7 @@
         <button id="btn-fix" class="primary">🔧 Reset (R)</button>
         <button id="btn-drone2">🛸 Drohne ausbringen (V)</button>
         <button id="btn-recall" class="primary">↩ Drohne einholen (Q)</button>
+        <label id="spd-box" hidden>Tempo <input id="spd" type="range" min="0.2" max="1" step="0.05" value="1"> <b id="spd-val">100%</b> <small>(Z/X)</small></label>
         <label id="cut-box" hidden>Abtrag <input id="cut" type="range" min="0.1" max="1.5" step="0.05" value="1"> <b id="cut-val">1.00 m</b> <small>(F/G)</small></label>
       </div>
       <button id="btn-pause2" aria-label="Pause">⏸</button>
@@ -41,6 +42,12 @@
       <div id="overlay"></div>
       <div id="touch-ui" hidden>
         <div id="stick" aria-label="Steuerkreuz"><div id="knob"></div></div>
+        <div id="dpad" hidden aria-label="Pfeiltasten für die Pumpe">
+          <button class="dp up" data-dir="up" aria-label="Pumpe hoch">↑</button>
+          <button class="dp left" data-dir="left" aria-label="Pumpe links">←</button>
+          <button class="dp right" data-dir="right" aria-label="Pumpe rechts">→</button>
+          <button class="dp down" data-dir="down" aria-label="Pumpe runter">↓</button>
+        </div>
         <button id="act" class="primary">⚓ Anker</button>
       </div>
     </section>

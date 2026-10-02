@@ -235,7 +235,7 @@ function syncMode() {
   $('btn-anchor').hidden = mode !== 'map'; $('btn-leave').hidden = mode !== 'slice';
   $('btn-drone2').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone';
   $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne' }[mode];
-  if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; }
+  if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; $('spd-box').hidden = true; }
   $('btn-drone').disabled = mode !== 'slice';
 }
 function anchor() { if (!drone && sim.anchor()) syncMode(); }
@@ -246,6 +246,11 @@ function setCut(v) {
   sim.setCutDepth(v);
   game.cutDepth = sim.cutDepth;
   $('cut').value = sim.cutDepth; $('cut-val').textContent = `${sim.cutDepth.toFixed(2)} m`;
+}
+function setSpeed(v) {
+  sim.setPumpSpeed(v);
+  game.pumpSpeed = sim.pumpSpeed;
+  $('spd').value = sim.pumpSpeed; $('spd-val').textContent = pct(sim.pumpSpeed);
 }
 function togglePause() {
   paused = !paused;
@@ -318,6 +323,7 @@ $('btn-leave').onclick = leave;
 $('btn-auto').onclick = toggleAuto;
 $('btn-fix').onclick = fixAuto;
 $('cut').oninput = (e) => setCut(parseFloat(e.target.value));
+$('spd').oninput = (e) => setSpeed(parseFloat(e.target.value));
 $('chk-oc').onchange = (e) => { game.overclock = e.target.checked; updatePlant(); };
 
 // ---------- Hauptschleife ----------
@@ -356,6 +362,8 @@ function frame(now) {
         if (readInput.tap('KeyT')) toggleAuto();
         if (readInput.tap('KeyR')) fixAuto();
         if (readInput.tap('KeyV')) startDrone();
+        if (readInput.tap('KeyZ')) setSpeed(sim.pumpSpeed - 0.1);
+        if (readInput.tap('KeyX')) setSpeed(sim.pumpSpeed + 0.1);
         if (sim.stats.echolot > 0) {
           if (readInput.tap('KeyF')) setCut(sim.cutDepth - 0.05);
           if (readInput.tap('KeyG')) setCut(sim.cutDepth + 0.05);
@@ -369,6 +377,8 @@ function frame(now) {
         $('btn-auto').hidden = sim.stats.autoLevel <= 0;
         $('btn-auto').textContent = sl.auto.on ? '🤖 Automatik aus (T)' : '🤖 Automatik an (T)';
         $('btn-fix').hidden = !sl.auto.error;
+        $('spd-box').hidden = false;
+        if (document.activeElement !== $('spd')) { $('spd').value = sim.pumpSpeed; $('spd-val').textContent = pct(sim.pumpSpeed); }
         $('cut-box').hidden = sim.stats.echolot <= 0;
         if (document.activeElement !== $('cut')) { $('cut').value = sim.cutDepth; $('cut-val').textContent = `${sim.cutDepth.toFixed(2)} m`; }
       }
@@ -408,11 +418,11 @@ showOverlay(`<h2>Seesanierung Uetikon</h2>
   <p>Das Spiel läuft in <b>Echtzeit</b>: Für jeden abgesaugten m³ der belasteten Schicht gibt es ${CONFIG.pay.perM3} CHF (Altlasten ${Math.round(CONFIG.pay.perM3 * CONFIG.pay.toxicMultiplier)} CHF), zu tief abgetragener Boden wird nicht bezahlt. Entsorgung, Analyse, Bussen und Reparaturen kosten. Zusatzleistungen (Fremdstoffe, harte Schicht, Fässer) rechnest du als <b>Nachträge</b> beim Bauherrn ab: je höher die Forderung, desto unwahrscheinlicher die Genehmigung. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
   was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
   <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
-    <p><b>Stick</b> links fährt (rastet auf eine Achse ein). Der grosse Knopf rechts wirft auf der Karte den Anker und saugt im Querschnitt, solange du ihn hältst. Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
+    <p><b>Stick</b> links fährt den Ponton auf der Karte. Im Querschnitt steuerst du die Pumpe nur mit den <b>Pfeil-Knöpfen</b> (halten = fahren) und stellst mit dem <b>Tempo-Regler</b> ein, wie schnell sie fährt (langsam = tieferer Schnitt, mehr Kippgefahr). Der grosse Knopf rechts wirft auf der Karte den Anker und saugt im Querschnitt, solange du ihn hältst. Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
     Unter dem Spielfeld stehen Zurück zur Karte, Automatik, Reset und Drohne (dort steuert der Stick in alle Richtungen, der grosse Knopf holt sie ein), oben rechts die Pause. Der Shop liegt unten im Fach „Anlage &amp; Ausrüstung“; solange es offen ist, steht das Spiel still.</p></details>
   <details ${isTouch ? '' : 'open'}><summary>Steuerung am Computer</summary>
     <p>Karte: WASD / Pfeile (oder Maus gedrückt) fahren, <b>E</b> / Leertaste wirft den Anker. Querschnitt: A/D fährt die Pumpe seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse), Leertaste / Mausklick saugt, nur nach rechts.
-    <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>V</b> Drohne ausbringen (Q holt sie ein), <b>P</b> Pause. Drohne: WASD/Pfeile in beide Achsen.</p></details>
+    <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>Z/X</b> Tempo der Pumpe, <b>V</b> Drohne ausbringen (Q holt sie ein), <b>P</b> Pause. Drohne: WASD/Pfeile in beide Achsen.</p></details>
   <details><summary>Regeln im See</summary>
     <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, der Rückweg saugt nicht. Gräbst du zu tief, kippt sie um.</p>
     <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.

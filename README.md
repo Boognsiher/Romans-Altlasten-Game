@@ -48,7 +48,8 @@ Karte: WASD/Pfeile (oder Maus gedrückt) fahren, E/Leertaste Anker werfen. Quers
 Balancing (alle Zahlen in `src/config.js`), Speichern (localStorage), Sound, Ereignisse mit Entscheidungen, Touch-Steuerung, Fossilienschicht als Bonus.
 
 ## Steuerung (Handy)
-- **Stick links** (rastet auf vier Richtungen ein, Hysterese gegen Flackern): fährt den Ponton bzw. Katze und Kette.
+- **Pumpe im Querschnitt:** nur über vier **Pfeil-Knöpfe** (halten = fahren), dazu ein **Tempo-Regler** (20 bis 100 % des Höchsttempos; Tasten Z/X am Computer). Das Höchsttempo wird mit dem Upgrade **Katze & Winde** erhöht. Langsam fahren heisst tieferer Schnitt pro Zelle und mehr Kippgefahr.
+- **Stick links (Karte und Drohne)** (rastet auf vier Richtungen ein, Hysterese gegen Flackern): fährt den Ponton bzw. Katze und Kette.
 - **Grosser Knopf rechts:** Karte = Anker werfen, Querschnitt = Saugen, solange er gehalten wird. Stick und Knopf laufen unabhängig (Mehrfinger).
 - **Tipp auf die Karte:** Ponton fährt hin und wirft dort den Anker.
 - **Oben:** Zurück zur Karte, Automatik, Reset, Abtrag-Regler; rechts oben die Pause.

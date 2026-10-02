@@ -853,3 +853,66 @@ test('Drohne: Akku begrenzt den Flug; Flug abrechnen: Einsatz kostet, Befliegung
   assert.equal(g.finds.length, 2);
   assert.equal(g.finds[0].status, 'found');
 });
+
+test('Tempo-Regler der Pumpe: Fahrt skaliert mit dem Regler, Regler wird begrenzt und gilt im laufenden Querschnitt', () => {
+  const run = (setting) => {
+    const g = new Game(60); g.lake.setFlat(5);
+    const sim = g.createSession(); sim.anchor(); sim.slice.h = 5; sim.slice.x = sim.slice.x0 + 1;
+    sim.setPumpSpeed(setting);
+    const x0 = sim.slice.x;
+    for (let i = 0; i < 10; i++) sim.update(0.05, { dx: 1, dy: 0, suction: false });
+    return sim.slice.x - x0;
+  };
+  const full = run(1), half = run(0.5);
+  assert.ok(Math.abs(half - full / 2) < 0.02, `${half} vs ${full / 2}`);
+  const sim = new Game(61).createSession();
+  sim.setPumpSpeed(9); assert.equal(sim.pumpSpeed, CONFIG.pumpSpeed.max);
+  sim.setPumpSpeed(-1); assert.equal(sim.pumpSpeed, CONFIG.pumpSpeed.min);
+});
+
+test('Tempo gilt auch für Kette (hoch/runter) und wird im Spiel gespeichert', () => {
+  const g = new Game(62); g.lake.setFlat(2);
+  g.pumpSpeed = 0.5;
+  const sim = g.createSession(); sim.anchor();
+  assert.equal(sim.slice.speedSetting, 0.5);
+  sim.slice.h = 6;
+  sim.update(0.1, { dx: 0, dy: 1 });
+  const fall = 6 - sim.slice.h;
+  assert.ok(Math.abs(fall - g.stats.headSpeed * 0.5 * 0.1) < 1e-9);
+});
+
+test('Upgrade Katze & Winde erhöht das Höchsttempo der Pumpe, nicht das des Pontons', () => {
+  const g = new Game(63);
+  const base = g.stats.headSpeed, ponton = g.stats.speed;
+  assert.equal(g.stats.headSpeed, 4.8);
+  g.levels.winch = 3;
+  assert.ok(g.stats.headSpeed > base + 1.9);
+  assert.equal(g.stats.speed, ponton);
+  g.levels.speed = 3;
+  assert.equal(g.stats.headSpeed, 4.8 + 3 * 0.7); // Ponton-Antrieb beeinflusst die Pumpe nicht mehr
+  assert.ok(g.buyUpgrade('winch') || g.money < g.nextUpgradeCost('winch'));
+});
+
+test('Wirtschaft: Entsorgung kostet auch bei Typ C weniger als die Vergütung', () => {
+  const P = CONFIG.plant, perBatchPay = P.batchSize * CONFIG.pay.perM3;
+  const stats = computeStats();
+  for (const cls of ['B', 'E', 'C']) {
+    const cost = P.batchSize * stats.dewater * P.classes[cls].price + P.labFeePerBatch;
+    assert.ok(cost < perBatchPay * 0.9, `${cls}: ${cost} vs ${perBatchPay}`);
+  }
+});
+
+test('Trübung: ein Dauerlauf mit der Basispumpe löst keine Dauer-Bussen aus', () => {
+  const g = new Game(64); g.lake.setFlat(5);
+  const sim = g.createSession(); sim.anchor(); sim.slice.h = 5;
+  let fines = 0;
+  for (let i = 0; i < 1200; i++) { fines += sim.update(0.05, { dx: (i % 200) < 100 ? 1 : -1, dy: 0, suction: true }).fines; } // 60 s
+  assert.ok(fines < 5000, `Bussen ${fines}`);
+});
+
+test('Angebrochene Charge: Analyse anteilig, mindestens 20 Prozent', () => {
+  const stats = computeStats();
+  assert.equal(processBatch(25, 0, stats, false, () => 0).lab, CONFIG.plant.labFeePerBatch);
+  assert.equal(processBatch(5, 0, stats, false, () => 0).lab, Math.round(CONFIG.plant.labFeePerBatch * 0.2));
+  assert.equal(processBatch(0.3, 0, stats, false, () => 0).lab, Math.round(CONFIG.plant.labFeePerBatch * 0.2));
+});

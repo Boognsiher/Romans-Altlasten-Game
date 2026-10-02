@@ -6,7 +6,7 @@ const KNOB_RADIUS = 38;
 
 export function setupTouch(input, hooks) {
   const root = document.getElementById('touch-ui'), stick = document.getElementById('stick'), knob = document.getElementById('knob');
-  const act = document.getElementById('act');
+  const act = document.getElementById('act'), dpad = document.getElementById('dpad');
   root.hidden = false;
   document.body.classList.add('touch');
   let mode = 'map';
@@ -34,6 +34,23 @@ export function setupTouch(input, hooks) {
   stick.addEventListener('pointerup', endStick);
   stick.addEventListener('pointercancel', endStick);
 
+  // --- Pfeil-Knöpfe für die Pumpe (Querschnitt): halten = fahren ---
+  const pressed = new Map(); // pointerId -> Richtung
+  const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const applyDpad = () => {
+    let dx = 0, dy = 0;
+    for (const dir of pressed.values()) { dx += DIRS[dir][0]; dy += DIRS[dir][1]; }
+    input.virtual.dx = Math.max(-1, Math.min(1, dx)); input.virtual.dy = Math.max(-1, Math.min(1, dy));
+  };
+  for (const btn of dpad.querySelectorAll('.dp')) {
+    const release = (e) => { if (pressed.delete(e.pointerId)) { btn.classList.remove('held'); applyDpad(); } };
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.setPointerCapture(e.pointerId); pressed.set(e.pointerId, btn.dataset.dir); btn.classList.add('held'); applyDpad(); });
+    btn.addEventListener('pointerup', release);
+    btn.addEventListener('pointercancel', release);
+    btn.addEventListener('lostpointercapture', release);
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
   // --- Aktionsknopf ---
   let actId = null;
   const endAct = (e) => { if (e.pointerId === actId) { actId = null; input.virtual.suction = false; act.classList.remove('held'); } };
@@ -53,6 +70,8 @@ export function setupTouch(input, hooks) {
       mode = m;
       if (m !== 'slice') { input.virtual.suction = false; act.classList.remove('held'); }
       analog = m === 'drone';
+      pressed.clear(); for (const b of dpad.querySelectorAll('.dp')) b.classList.remove('held');
+      stick.hidden = m === 'slice'; dpad.hidden = m !== 'slice'; // Pumpe: nur Pfeil-Knöpfe, sonst Stick
       input.virtual.dx = 0; input.virtual.dy = 0; knob.style.transform = '';
       act.textContent = { map: '⚓ Anker', slice: '🌀 Saugen', drone: '↩ Einholen' }[m];
     },

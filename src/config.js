@@ -14,12 +14,12 @@ export const CONFIG = {
   // Anlage an Land: entwässert den Schlamm, danach wird jede Charge analysiert und nach VVEA eingestuft
   plant: {
     batchSize: 25, // m³ pro Charge (= eine Probe)
-    labFeePerBatch: 400, // CHF Analyse pro Charge
+    labFeePerBatch: 250, // CHF Analyse pro volle Charge (angebrochene Chargen anteilig, mindestens 20%)
     overclockFactor: 1.5, // Durchsatz beim Übertakten
     overclockRisk: 0.2, // Zuschlag auf das Risiko teurer Klassen
     toxicRisk: 0.8, // Einfluss des Altlasten-Anteils auf das Risiko
     // Preis in CHF pro m³ entwässertes Material
-    classes: { B: { name: 'Typ B', price: 90 }, E: { name: 'Typ E', price: 220 }, C: { name: 'Typ C', price: 500 } },
+    classes: { B: { name: 'Typ B', price: 60 }, E: { name: 'Typ E', price: 150 }, C: { name: 'Typ C', price: 320 } },
     baseProb: { B: 0.65, E: 0.28, C: 0.07 },
     riskShift: { E: 0.3, C: 0.35 }, // bei Risiko 1: so viel Wahrscheinlichkeit wandert von B zu E bzw. C
   },
@@ -87,6 +87,7 @@ export const CONFIG = {
     bonusBase: 6000, bonusPerM3: 60, penaltyShare: 0.3, // verpasst: 30% der Prämie als Konventionalstrafe
     cleanNeeded: 0.97, acceptedNeeded: 0.9,
   },
+  pumpSpeed: { min: 0.2, max: 1, default: 1 }, // Tempo-Regler der Pumpe (Anteil des Höchsttempos)
   // Tauchdrohne: Abnahme des gereinigten Seegrunds und Befliegungsdaten
   drone: {
     fee: 800, acceptMax: 0.05, winAcceptFraction: 0.9, // Restschlamm (m³) pro Zelle für eine Abnahme
@@ -102,15 +103,18 @@ export const CONFIG = {
       boxRows: 5, // der Kasten deckt so viele Karten-Zeilen ab (Ergebnis gilt für alle)
     },
   },
-  turbidityFineThreshold: 0.7,
-  turbidityFinePerSecond: 400, // CHF/s über der Schwelle
+  turbidityFineThreshold: 0.8,
+  turbidityFinePerSecond: 150, // CHF/s über der Schwelle
+  turbidityGain: 30, // Trübung steigt mit Pumpenleistung / turbidityGain pro Sekunde (kleiner = trüber)
+  turbidityDecay: 0.08, // und sinkt pro Sekunde um diesen Betrag
 };
 
 // Basiswerte ohne Upgrades
 export const BASE_STATS = {
   power: 2.0, // m³/s Saugleistung
   radius: 1.8, // Zellen
-  speed: 4.0, // Zellen/s
+  speed: 4.0, // Zellen/s (Ponton auf der Karte)
+  headSpeed: 4.8, // Einheiten/s: Höchsttempo der Pumpe an Katze und Kette (Tempo-Regler 20-100% davon)
   curtain: 0, // Schlammschürze: reduziert Trübung (0..1)
   suctionSpeedFactor: 0.55, // (derzeit ungenutzt, Fahren und Saugen sind getrennte Instanzen)
   plantCapacity: 0.8, // m³/s, die die Anlage verarbeitet
@@ -168,6 +172,13 @@ export const UPGRADES = {
     desc: 'Trockeneres Material, weniger Entsorgungsvolumen',
     maxLevel: 4, baseCost: 9000, growth: 1.6,
     apply: (s, lvl) => { s.dewater = Math.max(0.3, s.dewater - lvl * 0.07); },
+  },
+  winch: {
+    group: 'ponton',
+    name: 'Katze & Winde',
+    desc: 'Pumpe fährt und taucht schneller (Höchsttempo; mit dem Tempo-Regler stellst du es ein)',
+    maxLevel: 5, baseCost: 5000, growth: 1.5,
+    apply: (s, lvl) => { s.headSpeed += lvl * 0.7; },
   },
   ballast: {
     group: 'ponton',

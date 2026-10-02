@@ -25,6 +25,7 @@ export class Game {
     this.stock = { normal: 0, toxic: 0 }; // Rohschlamm im Puffer vor der Anlage (m³)
     this.batch = { vol: 0, toxic: 0, idle: 0 }; // Charge, die gerade in der Anlage zusammenkommt
     this.cutDepth = CONFIG.echolot.defaultCut; // Abtragsdicke-Sollwert der Automatik
+    this.pumpSpeed = CONFIG.pumpSpeed.default; // Tempo-Regler der Pumpe (bleibt gespeichert)
     this.overclock = false; // Anlage übertakten: mehr Durchsatz, höheres Risiko teurer Klassen
     this.totals = { removed: 0, pay: 0, claimsPaid: 0, claimsFees: 0, claimsAccepted: 0, claimsPartial: 0, claimsRejected: 0, claimsExpired: 0, docPaid: 0, findsPaid: 0, findsFees: 0, findsSold: 0, fossilsLost: 0, fossilFines: 0, jobsDone: 0, jobsFailed: 0, jobsPaid: 0, jobsPenalty: 0, disposalPaid: 0, finesPaid: 0, repairsPaid: 0, overdigPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
     this.today = freshDay();
@@ -69,6 +70,7 @@ export class Game {
   createSession() {
     const sim = new DredgeSim(this.lake, this.stats, this.rng);
     sim.cutDepth = this.cutDepth;
+    sim.pumpSpeed = this.pumpSpeed;
     sim.bufferRoom = this.bufferRoom;
     return sim;
   }
