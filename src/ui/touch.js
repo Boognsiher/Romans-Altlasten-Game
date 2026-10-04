@@ -52,28 +52,30 @@ export function setupTouch(input, hooks) {
   }
 
   // --- Aktionsknopf ---
-  let actId = null;
-  const endAct = (e) => { if (e.pointerId === actId) { actId = null; input.virtual.suction = false; act.classList.remove('held'); } };
   act.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    if (mode === 'map') { hooks.anchor(); return; }
-    if (mode === 'drone') { hooks.recall(); return; }
-    if (mode === 'slice') { actId = e.pointerId; act.setPointerCapture(e.pointerId); input.virtual.suction = true; act.classList.add('held'); }
+    if (mode === 'map') hooks.anchor();
+    else if (mode === 'slice') hooks.togglePump(); // Pumpe ein/aus (ein Tipp)
+    else if (mode === 'drone') hooks.recall();
   });
-  act.addEventListener('pointerup', endAct);
-  act.addEventListener('pointercancel', endAct);
   for (const el of [stick, act]) el.addEventListener('contextmenu', (e) => e.preventDefault());
 
   return {
+    // Pumpenzustand auf dem grossen Knopf anzeigen (nur im Querschnitt)
+    setPump(on) {
+      if (mode !== 'slice') return;
+      act.textContent = on ? '🌀 Pumpe AN' : '🌀 Pumpe AUS';
+      act.classList.toggle('held', on);
+    },
     setMode(m) {
       if (m === mode) return;
       mode = m;
-      if (m !== 'slice') { input.virtual.suction = false; act.classList.remove('held'); }
+      act.classList.remove('held');
       analog = m === 'drone';
       pressed.clear(); for (const b of dpad.querySelectorAll('.dp')) b.classList.remove('held');
       stick.hidden = m === 'slice'; dpad.hidden = m !== 'slice'; // Pumpe: nur Pfeil-Knöpfe, sonst Stick
       input.virtual.dx = 0; input.virtual.dy = 0; knob.style.transform = '';
-      act.textContent = { map: '⚓ Anker', slice: '🌀 Saugen', drone: '↩ Einholen' }[m];
+      act.textContent = { map: '⚓ Anker', slice: '🌀 Pumpe AUS', drone: '↩ Einholen' }[m];
     },
   };
 }

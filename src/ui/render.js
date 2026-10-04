@@ -304,11 +304,13 @@ export function drawSlice(ctx, lake, sim) {
     ctx.fillStyle = sl.auto.error ? '#ff7a6b' : '#7bd88f'; ctx.font = 'bold 16px system-ui, sans-serif';
     ctx.fillText(sl.auto.error ? 'AUTOMATIK STÖRUNG (R)' : 'AUTOMATIK', W - 230, SLICE_TOP - 8);
   }
+  ctx.fillStyle = sim.pumpOn ? '#7bd88f' : '#ffffff88'; ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'right'; // Pumpenschalter
+  ctx.fillText(sim.pumpOn ? 'PUMPE AN' : 'PUMPE AUS', W - 12, SLICE_TOP + 18); ctx.textAlign = 'start';
   // Arbeitsrichtung: nur nach rechts (und nach unten) wird gesaugt
   ctx.fillStyle = sl.suctioning ? '#7fe3ff' : '#ffffff66';
   ctx.beginPath(); ctx.moveTo(mouth.x + 20, mouth.y - 10); ctx.lineTo(mouth.x + 36, mouth.y - 3); ctx.lineTo(mouth.x + 20, mouth.y + 4); ctx.fill();
   ctx.fillStyle = '#ffffff55'; ctx.font = '14px system-ui, sans-serif';
-  ctx.fillText('Arbeitsrichtung ▶  (Rückweg saugt nicht)', 12, SLICE_TOP - 8);
+  ctx.fillText('Rückwärts saugt nicht', 12, SLICE_TOP - 8);
   turbidityVeil(ctx, sim, W, H);
 }
 

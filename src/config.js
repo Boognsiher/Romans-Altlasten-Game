@@ -51,6 +51,8 @@ export const CONFIG = {
   pump: {
     offsetX: 0.5, // Einsaugöffnung rechts der Pumpenmitte (Zellen): unten rechts am Pumpenkörper
     offsetY: 0.3, // und unterhalb des Pumpenbodens (Einheiten)
+    fullDraw: 2.0, // Summe der Saugwichte, ab der die volle Leistung ankommt: je weiter der Saugmund vom Material, desto schwächer
+    minTravel: 1.0, // Zellen/s: so schnell gilt die Pumpe mindestens als bewegt (Stillstand = tiefer Schnitt)
     tiltRate: 0.6, // Schieflage pro Sekunde und Einheit Abtragtiefe (m³ pro gefahrene Zelle) über der Standfestigkeit
     tiltRecover: 0.4, // Erholung pro Sekunde
     tipSeconds: 6, // Zeit, bis die Pumpe wieder aufgerichtet ist

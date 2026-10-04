@@ -17,6 +17,7 @@ export class DredgeSim {
     this.bufferRoom = Infinity; // so viel m³ passen noch in den Puffer vor der Anlage (setzt das Game)
     this.mode = 'map';
     this.slice = null;
+    this.pumpOn = false; // Pumpe ein/aus (nur im Querschnitt): saugt auch im Stillstand, rückwärts nie
     this.x = 1; // Ponton-Position in Zellenkoordinaten
     this.y = 1;
     this.turbidity = 0; // 0..1
@@ -38,6 +39,7 @@ export class DredgeSim {
     if (this.mode !== 'map') return false;
     this.slice = new SliceSim(this.lake, this.stats, this.x, this.row, this.rng, this.cutDepth, this.pumpSpeed);
     this.mode = 'slice';
+    this.pumpOn = false;
     return true;
   }
 
@@ -46,12 +48,19 @@ export class DredgeSim {
     if (this.mode !== 'slice') return false;
     this.slice = null;
     this.mode = 'map';
+    this.pumpOn = false;
     return true;
   }
 
   setCutDepth(v) {
     this.cutDepth = Math.min(CONFIG.echolot.maxCut, Math.max(CONFIG.echolot.minCut, v));
     if (this.slice) this.slice.cutDepth = this.cutDepth;
+  }
+
+  togglePump() {
+    if (this.mode !== 'slice') return false;
+    this.pumpOn = !this.pumpOn;
+    return true;
   }
 
   setPumpSpeed(v) {
@@ -77,17 +86,19 @@ export class DredgeSim {
       this.y = clamp(this.y + dy * s.speed * dt, 0, this.lake.rows);
     } else {
       this.slice.blocked = this.bufferFull; // Puffer voll: auch die Automatik darf nicht saugen
-      const r = this.slice.update(dt, input);
+      const r = this.slice.update(dt, { ...input, suction: input.suction || this.pumpOn });
       for (const n of this.slice.notes.splice(0)) {
         this.notes.push(n);
         if (n.kind === 'clog') { d.clogs++; d.clogItems.push(n.item); }
-        if (n.kind === 'tip') { d.tips++; d.repairs += CONFIG.pump.repairCost; }
+        if (n.kind === 'tip') { d.tips++; d.repairs += CONFIG.pump.repairCost; this.pumpOn = false; } // nach dem Umkippen bleibt die Pumpe aus
       }
       d.removed = r.removed; d.toxicRemoved = r.toxicRemoved; d.overdug = r.overdug; d.hardRemoved = r.hardRemoved; d.fossilsLost = r.fossilsLost;
-      if (this.slice.suctioning) {
-        // Aufgewirbelter Schlamm: mehr Leistung, Bewegung und Altlasten -> mehr Trübung
+      // Trübung entsteht nur, wenn die Pumpe am Boden wirklich Material saugt (anteilig an der genutzten Leistung):
+      // eine Pumpe, die im freien Wasser läuft, wirbelt nichts auf. Mehr Leistung, Bewegung und Altlasten = mehr Trübung.
+      const use = s.power * dt > 0 ? clamp(r.removed / (s.power * dt), 0, 1) : 0;
+      if (this.slice.suctioning && use > 0) {
         const boost = (this.slice.moving ? 1.4 : 1) * (r.toxicRemoved > 0 ? 1.5 : 1);
-        this.turbidity += (s.power / CONFIG.turbidityGain) * boost * (1 - s.curtain) * dt;
+        this.turbidity += (s.power / CONFIG.turbidityGain) * boost * (1 - s.curtain) * use * dt;
       }
     }
 

@@ -159,7 +159,7 @@ export class SliceSim {
     this.moving = Math.abs(dx) + Math.abs(dy) > 0.01;
 
     const along = dx * SLICE.work.x + dy * SLICE.work.y; // >0: in Arbeitsrichtung
-    const working = !!ctl.suction && !clogged && !this.blocked && along > 0.05;
+    const working = !!ctl.suction && !clogged && !this.blocked && along > -0.05; // Pumpe an: saugt auch im Stillstand, nur rückwärts nicht
     const af = a.on ? CONFIG.auto.speedFactor[lvl] : 1;
     const speed = s.headSpeed * this.speedSetting * af * (working ? s.suctionSpeedFactor : along < -0.05 ? SLICE.returnBoost : 1);
 
@@ -172,8 +172,7 @@ export class SliceSim {
     }
     this.h = Math.max(this.surfaceAt(this.x), Math.min(this.h, SLICE.viewH)); // nicht in den Grund
 
-    // Am Anschlag gibt es keine Fahrt, also auch kein Saugen (horizontal)
-    this.suctioning = working && (dx === 0 || Math.abs(this.x - oldX) > 1e-9);
+    this.suctioning = working;
     if (!this.suctioning) {
       this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
       return ZERO;
@@ -195,7 +194,7 @@ export class SliceSim {
 
     // Zu tief abgetragen? Pro gefahrene Zelle wird zu viel Material weggesaugt: der Boden bricht
     // vor der Pumpe weg und sie kippt nach vorne. Höher ziehen, schneller fahren oder Ballast helfen.
-    const dist = Math.abs(this.x - oldX), cut = dist > 1e-9 ? res.removed / this.lake.area / dist : 0;
+    const dist = Math.max(Math.abs(this.x - oldX), P.minTravel * dt), cut = res.removed / this.lake.area / dist; // im Stillstand zählt eine Mindestfahrt: wer stehen bleibt, untergräbt den Boden
     if (cut > s.stability) this.tilt += (cut - s.stability) * P.tiltRate * dt;
     else this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
     if (res.overdug > 1e-6 && this.overNote <= 0) {

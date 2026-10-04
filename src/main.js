@@ -233,7 +233,7 @@ function syncMode() {
   $('shift-hud').hidden = false;
   $('shift-actions').hidden = false;
   $('btn-anchor').hidden = mode !== 'map'; $('btn-leave').hidden = mode !== 'slice';
-  $('btn-drone2').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone';
+  $('btn-drone2').hidden = mode !== 'slice'; $('btn-pump').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone';
   $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne' }[mode];
   if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; $('spd-box').hidden = true; }
   $('btn-drone').disabled = mode !== 'slice';
@@ -241,6 +241,7 @@ function syncMode() {
 function anchor() { if (!drone && sim.anchor()) syncMode(); }
 function leave() { if (!drone && sim.leave()) syncMode(); }
 function toggleAuto() { if (!drone) sim.toggleAuto(); }
+function togglePump() { if (!drone) sim.togglePump(); }
 function fixAuto() { if (!drone) sim.fixAuto(); }
 function setCut(v) {
   sim.setCutDepth(v);
@@ -307,13 +308,14 @@ function restart() {
 $('btn-drone').onclick = startDrone;
 $('btn-drone2').onclick = startDrone;
 $('btn-recall').onclick = recall;
+$('btn-pump').onclick = togglePump;
 $('btn-pause').onclick = togglePause;
 $('btn-pause2').onclick = togglePause;
 $('panel-handle').onclick = () => setSheet(!sheetOpen);
 addEventListener('resize', () => { if (sheetOpen && !narrow()) setSheet(false); });
 
 // Touch: Stick, Aktionsknopf, Tippen auf die Karte
-const touch = isTouch ? setupTouch(readInput, { anchor, recall }) : null;
+const touch = isTouch ? setupTouch(readInput, { anchor, recall, togglePump }) : null;
 readInput.onTap((px, py) => {
   if (drone || sim.mode !== 'map' || paused || sheetOpen || overlayOpen()) return;
   mapTarget = { x: Math.min(sim.lake.cols, Math.max(0, px / CELL)), y: Math.min(sim.lake.rows, Math.max(0, py / CELL)) };
@@ -362,6 +364,8 @@ function frame(now) {
         if (readInput.tap('KeyT')) toggleAuto();
         if (readInput.tap('KeyR')) fixAuto();
         if (readInput.tap('KeyV')) startDrone();
+        if (readInput.tap('Space')) togglePump(); // Pumpe ein/aus
+        inp.suction = sim.pumpOn; // gesaugt wird nur bei eingeschalteter Pumpe (Halten von Leertaste oder Maus zählt nicht)
         if (readInput.tap('KeyZ')) setSpeed(sim.pumpSpeed - 0.1);
         if (readInput.tap('KeyX')) setSpeed(sim.pumpSpeed + 0.1);
         if (sim.stats.echolot > 0) {
@@ -377,6 +381,9 @@ function frame(now) {
         $('btn-auto').hidden = sim.stats.autoLevel <= 0;
         $('btn-auto').textContent = sl.auto.on ? '🤖 Automatik aus (T)' : '🤖 Automatik an (T)';
         $('btn-fix').hidden = !sl.auto.error;
+        $('btn-pump').textContent = sim.pumpOn ? '🌀 Pumpe: AN (Leertaste)' : '🌀 Pumpe: AUS (Leertaste)';
+        $('btn-pump').classList.toggle('on', sim.pumpOn);
+        touch?.setPump(sim.pumpOn);
         $('spd-box').hidden = false;
         if (document.activeElement !== $('spd')) { $('spd').value = sim.pumpSpeed; $('spd-val').textContent = pct(sim.pumpSpeed); }
         $('cut-box').hidden = sim.stats.echolot <= 0;
@@ -418,13 +425,13 @@ showOverlay(`<h2>Seesanierung Uetikon</h2>
   <p>Das Spiel läuft in <b>Echtzeit</b>: Für jeden abgesaugten m³ der belasteten Schicht gibt es ${CONFIG.pay.perM3} CHF (Altlasten ${Math.round(CONFIG.pay.perM3 * CONFIG.pay.toxicMultiplier)} CHF), zu tief abgetragener Boden wird nicht bezahlt. Entsorgung, Analyse, Bussen und Reparaturen kosten. Zusatzleistungen (Fremdstoffe, harte Schicht, Fässer) rechnest du als <b>Nachträge</b> beim Bauherrn ab: je höher die Forderung, desto unwahrscheinlicher die Genehmigung. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
   was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
   <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
-    <p><b>Stick</b> links fährt den Ponton auf der Karte. Im Querschnitt steuerst du die Pumpe nur mit den <b>Pfeil-Knöpfen</b> (halten = fahren) und stellst mit dem <b>Tempo-Regler</b> ein, wie schnell sie fährt (langsam = tieferer Schnitt, mehr Kippgefahr). Der grosse Knopf rechts wirft auf der Karte den Anker und saugt im Querschnitt, solange du ihn hältst. Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
+    <p><b>Stick</b> links fährt den Ponton auf der Karte. Im Querschnitt steuerst du die Pumpe nur mit den <b>Pfeil-Knöpfen</b> (halten = fahren) und stellst mit dem <b>Tempo-Regler</b> ein, wie schnell sie fährt (langsam = tieferer Schnitt, mehr Kippgefahr). Der grosse Knopf rechts wirft auf der Karte den Anker und schaltet im Querschnitt die <b>Pumpe ein und aus</b> (sie saugt dann auch im Stillstand, rückwärts nie). Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
     Unter dem Spielfeld stehen Zurück zur Karte, Automatik, Reset und Drohne (dort steuert der Stick in alle Richtungen, der grosse Knopf holt sie ein), oben rechts die Pause. Der Shop liegt unten im Fach „Anlage &amp; Ausrüstung“; solange es offen ist, steht das Spiel still.</p></details>
   <details ${isTouch ? '' : 'open'}><summary>Steuerung am Computer</summary>
-    <p>Karte: WASD / Pfeile (oder Maus gedrückt) fahren, <b>E</b> / Leertaste wirft den Anker. Querschnitt: A/D fährt die Pumpe seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse), Leertaste / Mausklick saugt, nur nach rechts.
+    <p>Karte: WASD / Pfeile (oder Maus gedrückt) fahren, <b>E</b> / Leertaste wirft den Anker. Querschnitt: A/D fährt die Pumpe seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse), <b>Leertaste</b> schaltet die Pumpe ein und aus: Sie saugt auch im Stillstand und vorwärts, rückwärts nie.
     <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>Z/X</b> Tempo der Pumpe, <b>V</b> Drohne ausbringen (Q holt sie ein), <b>P</b> Pause. Drohne: WASD/Pfeile in beide Achsen.</p></details>
   <details><summary>Regeln im See</summary>
-    <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, der Rückweg saugt nicht. Gräbst du zu tief, kippt sie um.</p>
+    <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, die Pumpe saugt nur am Boden im Material (im freien Wasser trübt sie nichts), rückwärts fahren saugt nicht. Gräbst du zu tief, kippt sie um.</p>
     <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
     Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> fährst du aus dem verankerten Ponton aus (V oder Knopf): Sie taucht nur im Kasten unter dem Ponton, sieht nur im Lichtkegel in Fahrtrichtung (leicht nach unten) und scannt den Boden, wenn du langsam und nah daran fährst. Sie nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
   <button class="primary" id="btn-go">Los</button>`);

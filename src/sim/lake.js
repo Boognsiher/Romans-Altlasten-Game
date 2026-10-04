@@ -135,6 +135,7 @@ export class Lake {
     const fossilsLost = [];
     for (const c of cells) wSum += c[1];
     if (wSum === 0) return { removed, toxicRemoved, overdug, hardRemoved, fossilsLost };
+    amount *= Math.min(1, wSum / CONFIG.pump.fullDraw); // im freien Wasser über dem Boden ist die Saugkraft schwach
     for (const [i, w] of cells) {
       const above = this.mass[i]; // belastete Schicht über der Sollsohle
       let eff = 1 / (1 + this.hard[i] * CONFIG.hard.factor); // harte Schicht: weniger Leistung

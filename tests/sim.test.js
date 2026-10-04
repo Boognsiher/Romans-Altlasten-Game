@@ -40,16 +40,19 @@ test('Saugen entfernt Material und liefert die Änderung als Delta', () => {
   assert.ok(Math.abs(sum - sim.removed) < 1e-6);
 });
 
-test('Karte saugt nicht, Querschnitt schon', () => {
+test('Karte saugt nicht, Querschnitt schon (auch im Stillstand)', () => {
   const g = new Game(3);
   const sim = g.createSession();
   sim.update(1, { dx: 0, dy: 0, suction: true });
   assert.equal(sim.removed, 0);
   g.lake.setFlat(5); sim.anchor(); sim.slice.h = 5;
   sim.update(0.5, { dx: 0, dy: 0, suction: true });
-  assert.equal(sim.removed, 0); // Stillstand saugt nicht
+  assert.ok(sim.removed > 0); // Pumpe an: saugt auch im Stillstand
+  const r1 = sim.removed;
+  sim.update(0.5, { dx: -1, dy: 0, suction: true });
+  assert.equal(sim.removed, r1); // rückwärts nie
   sim.update(0.5, { dx: 1, dy: 0, suction: true });
-  assert.ok(sim.removed > 0);
+  assert.ok(sim.removed > r1);
 });
 
 test('Anker nur in der Karte, Lichten nur im Querschnitt', () => {
@@ -963,4 +966,80 @@ test('Abnahme: bis 10 cm Restschicht gelten als sauber, darüber ist es Restschm
   const k = small.idx(1, 1); small.top[k] = small.target[k] + CONFIG.layer.snap / 2; small.mass[k] = CONFIG.layer.snap / 2;
   small.suckProfile(1, 1.5, small.top[k], 1.8, 0.01);
   assert.equal(small.mass[k], 0);
+});
+
+test('Pumpe ein/aus: im Stillstand wird gesaugt, aus heisst aus, rückwärts nie, Umkippen schaltet aus', () => {
+  const g = new Game(80); g.lake.setFlat(3);
+  const sim = g.createSession();
+  assert.equal(sim.togglePump(), false); // auf der Karte gibt es keine Pumpe
+  sim.anchor(); sim.slice.h = 3; sim.slice.x = sim.slice.x0 + 5;
+  assert.equal(sim.pumpOn, false);
+  assert.equal(sim.update(0.5, { dx: 0, dy: 0 }).removed, 0); // aus: nichts
+  assert.equal(sim.togglePump(), true);
+  assert.equal(sim.pumpOn, true);
+  assert.ok(sim.update(0.5, { dx: 0, dy: 0 }).removed > 0); // an: Stillstand saugt
+  assert.ok(sim.update(0.5, { dx: 1, dy: 0 }).removed > 0); // vorwärts auch
+  assert.equal(sim.update(0.5, { dx: -1, dy: 0 }).removed, 0); // rückwärts nie
+  assert.ok(sim.update(0.5, { dx: 0, dy: 0 }).removed > 0); // und danach läuft sie weiter
+  sim.togglePump();
+  assert.equal(sim.update(0.5, { dx: 0, dy: 0 }).removed, 0); // aus
+  sim.togglePump(); sim.leave();
+  assert.equal(sim.pumpOn, false); // beim Verlassen aus
+  sim.anchor();
+  assert.equal(sim.pumpOn, false); // und beim Ankern aus
+});
+
+test('Pumpe im Stillstand: Basispumpe untergräbt den Boden nicht, eine starke Pumpe kippt (Ballast hilft)', () => {
+  const run = (power, ballast = 0, seconds = 30) => {
+    const g = new Game(81); g.lake.setFlat(8); g.levels.ballast = ballast;
+    const sim = g.createSession(); sim.anchor(); sim.stats.power = power; sim.slice.h = 8; sim.slice.x = sim.slice.x0 + 4; sim.pumpOn = true;
+    for (let t = 0; t < seconds && sim.tips === 0; t += 0.05) sim.update(0.05, { dx: 0, dy: 0 });
+    return sim.tips;
+  };
+  assert.equal(run(2), 0, 'Basispumpe');
+  assert.equal(run(6), 1, 'starke Pumpe kippt im Stillstand');
+  assert.equal(run(6, 4), 0, 'mit Ballast bleibt sie stehen');
+});
+
+test('Pumpe bleibt nach einer Verstopfung an und läuft danach weiter; Puffer voll pausiert sie', () => {
+  const g = new Game(82); g.lake.setFlat(3);
+  const sim = g.createSession(); sim.anchor(); sim.slice.h = 3; sim.slice.x = sim.slice.x0 + 5; sim.pumpOn = true;
+  sim.slice.clog = 1;
+  assert.equal(sim.update(0.5, { dx: 0, dy: 0 }).removed, 0); // verstopft
+  for (let i = 0; i < 12; i++) sim.update(0.05, { dx: 0, dy: 0 });
+  assert.ok(sim.update(0.5, { dx: 0, dy: 0 }).removed > 0); // wieder frei
+  sim.bufferRoom = 0;
+  assert.equal(sim.update(0.5, { dx: 0, dy: 0 }).removed, 0); // Puffer voll
+  assert.equal(sim.pumpOn, true); // bleibt an, pausiert nur
+});
+
+test('Trübung entsteht nur am Boden im Material, nicht wenn die Pumpe im freien Wasser läuft', () => {
+  const run = (h) => {
+    const g = new Game(83); g.lake.setFlat(2); g.levels.power = 4;
+    const sim = g.createSession(); sim.anchor(); sim.stats.power = g.stats.power;
+    sim.slice.h = h; sim.slice.x = sim.slice.x0 + 4; sim.pumpOn = true;
+    let removed = 0;
+    for (let i = 0; i < 80; i++) { sim.slice.h = h; removed += sim.update(0.05, { dx: 0, dy: 0 }).removed; } // 4 s, Höhe gehalten
+    return { turbidity: sim.turbidity, removed };
+  };
+  const water = run(7.5), ground = run(2.1);
+  assert.equal(water.removed, 0);
+  assert.equal(water.turbidity, 0); // im Wasser: keine Trübung
+  assert.ok(ground.removed > 0);
+  assert.ok(ground.turbidity > 0.05); // am Boden: Trübung
+});
+
+test('Saugkraft hängt vom Abstand zum Material ab: am Boden voll, im freien Wasser kaum etwas und keine Trübung', () => {
+  const rate = (gap) => {
+    const g = new Game(84); g.lake.setFlat(3);
+    const sim = g.createSession(); sim.anchor(); sim.slice.x = sim.slice.x0 + 5; sim.pumpOn = true;
+    let removed = 0;
+    for (let t = 0; t < 0.5; t += 0.05) { sim.slice.h = 3 + gap; removed += sim.update(0.05, { dx: 0, dy: 0 }).removed; }
+    return { share: removed / 0.5 / g.stats.power, turbidity: sim.turbidity };
+  };
+  const ground = rate(0.3), mid = rate(1.5), water = rate(2.2);
+  assert.ok(ground.share > 0.9, `Boden ${ground.share}`);
+  assert.ok(mid.share < ground.share && mid.share > water.share);
+  assert.ok(water.share < 0.1, `Wasser ${water.share}`);
+  assert.equal(water.turbidity, 0);
 });
