@@ -13,8 +13,10 @@ export const U = 48; // Querschnitt: Pixel pro Einheit
 const SLICE_TOP = 60; // Wasseroberfläche (darüber der Ponton)
 const BEDROCK = 60; // Höhe des Felsbands unten
 
-export function sizeMap(canvas, lake) { canvas.width = lake.cols * CELL; canvas.height = lake.rows * CELL; }
-export function sizeSlice(canvas) { canvas.width = SLICE.cols * U; canvas.height = SLICE_TOP + SLICE.viewH * U + BEDROCK; }
+// Logische Grösse des Spielfelds; die tatsächliche Pixelgrösse setzt main.fitCanvas() passend zur Anzeige
+function setLogical(canvas, w, h) { canvas.logicalW = w; canvas.logicalH = h; canvas.width = w; canvas.height = h; }
+export function sizeMap(canvas, lake) { setLogical(canvas, lake.cols * CELL, lake.rows * CELL); }
+export function sizeSlice(canvas) { setLogical(canvas, SLICE.cols * U, SLICE_TOP + SLICE.viewH * U + BEDROCK); }
 
 // ---------- Instanz 1: Karte ----------
 export function drawMap(ctx, lake, sim, jobs = []) {

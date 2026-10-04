@@ -8,6 +8,8 @@ import { CONFIG } from '../src/config.js';
 import { computeStats } from '../src/sim/stats.js';
 import { Chain } from '../src/ui/chain.js';
 import { acceptChance, decide, claimedAmount, clampMarkup } from '../src/sim/claims.js';
+import { fitSize, renderQuality } from '../src/ui/layout.js';
+import { hintsFor, HINTS } from '../src/ui/hints.js';
 import { snapStick, steerToward, isTap } from '../src/ui/touch-logic.js';
 import { DroneSim } from '../src/sim/drone.js';
 import { classProbabilities, processBatch } from '../src/sim/plant.js';
@@ -1042,4 +1044,36 @@ test('Saugkraft hängt vom Abstand zum Material ab: am Boden voll, im freien Was
   assert.ok(mid.share < ground.share && mid.share > water.share);
   assert.ok(water.share < 0.1, `Wasser ${water.share}`);
   assert.equal(water.turbidity, 0);
+});
+
+test('Spielfeld-Grösse: füllt die Fläche, behält das Seitenverhältnis, wächst höchstens um den Maximalfaktor', () => {
+  const a = fitSize(1700, 700, 960, 600); // breit und niedrig: Höhe begrenzt
+  assert.ok(Math.abs(a.h - 700) < 1e-9 && Math.abs(a.w / a.h - 960 / 600) < 1e-9);
+  const b = fitSize(500, 900, 960, 600); // schmal: Breite begrenzt
+  assert.ok(Math.abs(b.w - 500) < 1e-9 && Math.abs(b.w / b.h - 960 / 600) < 1e-9);
+  const c = fitSize(5000, 5000, 960, 600, 3); // riesiger Bildschirm: höchstens dreifach
+  assert.ok(Math.abs(c.w - 2880) < 1e-9);
+  assert.ok(fitSize(0, 0, 960, 600).w >= 1); // nie 0
+});
+
+test('Render-Faktor: scharf auf Retina, nie unter 1, begrenzt', () => {
+  assert.equal(renderQuality(1, 960, 960), 1);
+  assert.equal(renderQuality(2, 1920, 960), 3); // begrenzt auf 3
+  assert.equal(renderQuality(1, 1440, 960), 2); // 1,5 -> ganzzahlig aufgerundet
+  assert.ok(Number.isInteger(renderQuality(1.25, 1313, 960)));
+  assert.equal(renderQuality(1, 300, 960), 1); // verkleinert: nicht unter 1
+  assert.equal(renderQuality(undefined, 960, 960), 1);
+});
+
+test('Steuerungsanzeige: für jede Ansicht und jedes Gerät vorhanden, mit Taste und Wirkung', () => {
+  for (const device of ['keys', 'touch']) for (const mode of ['map', 'slice', 'drone']) {
+    const list = HINTS[device][mode];
+    assert.ok(list.length >= 3, `${device}/${mode}`);
+    for (const [key, what] of list) assert.ok(key && what);
+  }
+  assert.deepEqual(hintsFor('map', false), HINTS.keys.map);
+  assert.deepEqual(hintsFor('map', true), HINTS.touch.map);
+  assert.deepEqual(hintsFor('unbekannt', false), []);
+  assert.ok(HINTS.keys.slice.some(([k]) => k === 'Leertaste')); // Pumpe an/aus
+  assert.ok(HINTS.keys.map.some(([k]) => k.includes('E'))); // Anker
 });

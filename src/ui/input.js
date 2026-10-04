@@ -19,7 +19,7 @@ export function createInput(canvas) {
   addEventListener('keyup', (e) => keys.delete(e.code));
   const toCanvas = (e) => {
     const r = canvas.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) / r.width) * canvas.width, y: ((e.clientY - r.top) / r.height) * canvas.height };
+    return { x: ((e.clientX - r.left) / r.width) * (canvas.logicalW ?? canvas.width), y: ((e.clientY - r.top) / r.height) * (canvas.logicalH ?? canvas.height) }; // logische Einheiten, unabhängig von der Render-Auflösung
   };
   const setPos = (e) => { Object.assign(pointer, toCanvas(e)); pointer.active = true; };
 

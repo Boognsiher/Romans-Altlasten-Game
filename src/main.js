@@ -5,6 +5,8 @@ import { acceptChance, claimedAmount } from './sim/claims.js';
 import { createInput } from './ui/input.js';
 import { setupTouch } from './ui/touch.js';
 import { steerToward } from './ui/touch-logic.js';
+import { fitSize, renderQuality } from './ui/layout.js';
+import { hintsFor } from './ui/hints.js';
 import { CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
@@ -224,6 +226,38 @@ function toast(text, kind = 'info') {
   toastTimer = setTimeout(() => { $('toast').innerHTML = ''; }, 4500);
 }
 
+// ---------- Spielfeld einpassen und Steuerungsanzeige ----------
+// Das Spielfeld füllt die verfügbare Fläche (Breite der Spalte, Höhe des Fensters abzüglich allem, was darunter im Fluss steht)
+// und wird in passender Auflösung gerendert.
+function fitCanvas() {
+  const lw = canvas.logicalW, lh = canvas.logicalH, stage = $('stage');
+  if (!lw) return;
+  let below = 0;
+  for (const el of stage.children) {
+    if (el === canvas || el.hidden) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.position !== 'static') continue; // schwebende Elemente zählen nicht
+    below += el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+  }
+  const docTop = canvas.getBoundingClientRect().top + scrollY;
+  const availH = Math.max(220, innerHeight - docTop - below - (narrow() ? 64 : 16));
+  const { w, h } = fitSize(stage.clientWidth, availH, lw, lh);
+  canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+  const q = renderQuality(devicePixelRatio, w, lw);
+  const cw = Math.round(lw * q), ch = Math.round(lh * q);
+  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+  canvas.q = cw / lw;
+}
+
+function updateHints() {
+  const mode = currentMode(), box = $('hints');
+  box.replaceChildren(...hintsFor(mode, isTouch).map(([key, what]) => {
+    const item = document.createElement('span'), k = document.createElement('kbd');
+    k.textContent = key; item.append(k, what);
+    return item;
+  }));
+}
+
 // ---------- Modus: Karte / Querschnitt / Drohne ----------
 const currentMode = () => (drone ? 'drone' : sim.mode);
 function syncMode() {
@@ -237,6 +271,7 @@ function syncMode() {
   $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne' }[mode];
   if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; $('spd-box').hidden = true; }
   $('btn-drone').disabled = mode !== 'slice';
+  updateHints(); fitCanvas();
 }
 function anchor() { if (!drone && sim.anchor()) syncMode(); }
 function leave() { if (!drone && sim.leave()) syncMode(); }
@@ -310,6 +345,8 @@ $('btn-drone2').onclick = startDrone;
 $('btn-recall').onclick = recall;
 $('btn-pump').onclick = togglePump;
 $('btn-pause').onclick = togglePause;
+addEventListener('resize', fitCanvas);
+addEventListener('orientationchange', () => setTimeout(fitCanvas, 200));
 $('btn-pause2').onclick = togglePause;
 $('panel-handle').onclick = () => setSheet(!sheetOpen);
 addEventListener('resize', () => { if (sheetOpen && !narrow()) setSheet(false); });
@@ -340,7 +377,7 @@ function frame(now) {
     if (drone) {
       if (readInput.tap('Escape', 'KeyQ')) recall();
       // Die Drohne bleibt in der Bildmitte: Maus/Finger steuern relativ zur Mitte, Tasten und Stick in beide Achsen
-      drone.update(dt, readInput.read({ x: canvas.width / 2, y: canvas.height / 2 }, { holdToMove: true }));
+      drone.update(dt, readInput.read({ x: canvas.logicalW / 2, y: canvas.logicalH / 2 }, { holdToMove: true }));
       const done = drone.scanned.reduce((a, v) => a + v, 0);
       $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${done}/16 Spalten gescannt · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
@@ -404,6 +441,7 @@ function frame(now) {
   if (game.status === 'ended' && !endShown) { updatePanel(); showEnd(); }
 
   if (sim.mode !== 'map' || drone) mapTarget = null;
+  ctx.setTransform(canvas.q || 1, 0, 0, canvas.q || 1, 0, 0); // logische Koordinaten, Auflösung passend zur Anzeige
   if (drone) drawDroneView(ctx, game.lake, drone);
   else if (sim.mode === 'slice') drawSlice(ctx, game.lake, sim);
   else {
@@ -437,4 +475,4 @@ showOverlay(`<h2>Seesanierung Uetikon</h2>
   <button class="primary" id="btn-go">Los</button>`);
 $('btn-go').onclick = hideOverlay;
 requestAnimationFrame(frame);
-globalThis.__dbg = () => ({ game, sim, drone }); // nur für Browser-Tests
+globalThis.__dbg = () => ({ game, sim, drone, mapTarget }); // nur für Browser-Tests

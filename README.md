@@ -49,6 +49,7 @@ Karte: WASD/Pfeile (oder Maus gedrückt) fahren, E/Leertaste Anker werfen. Quers
 Balancing (alle Zahlen in `src/config.js`), Speichern (localStorage), Sound, Ereignisse mit Entscheidungen, Touch-Steuerung, Fossilienschicht als Bonus.
 
 ## Steuerung (Handy)
+- **Anzeige:** Das Spielfeld füllt die verfügbare Fläche und wird in passender (ganzzahliger) Auflösung gerendert (`src/ui/layout.js`). Unter dem Spielfeld zeigt eine **Steuerungsanzeige** je Ansicht (Karte, Querschnitt, Drohne) und Gerät (Tastatur oder Touch), welche Tasten und Gesten was bewirken (`src/ui/hints.js`).
 - **Pumpe ein/aus:** Die Pumpe wird mit der Leertaste (Handy: grosser Knopf) ein- und ausgeschaltet und saugt dann auch im Stillstand und vorwärts, rückwärts nie. Die Saugkraft hängt vom Abstand zum Material ab (`pump.fullDraw`): am Boden voll, im freien Wasser kaum etwas, und die Trübung entsteht nur, wenn wirklich Material gesaugt wird. Wer im Stillstand saugt, zählt als langsam fahrend (`pump.minTravel`): eine starke Pumpe untergräbt den Boden und kippt, Ballast hilft.
 - **Pumpe im Querschnitt:** nur über vier **Pfeil-Knöpfe** (halten = fahren), dazu ein **Tempo-Regler** (20 bis 100 % des Höchsttempos; Tasten Z/X am Computer). Das Höchsttempo wird mit dem Upgrade **Katze & Winde** erhöht. Langsam fahren heisst tieferer Schnitt pro Zelle und mehr Kippgefahr.
 - **Stick links (Karte und Drohne)** (rastet auf vier Richtungen ein, Hysterese gegen Flackern): fährt den Ponton bzw. Katze und Kette.
