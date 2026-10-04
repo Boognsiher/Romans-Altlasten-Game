@@ -10,7 +10,7 @@ let lastT = 0;
 
 export const CELL = 20; // Karte: Pixel pro Zelle
 export const U = 48;
-const PW = 24, PH = 120; // Pumpe in Pixeln: Breite : Höhe = 1 : 5, hochkant // Querschnitt: Pixel pro Einheit
+const PW = 24, PH = 60; // Pumpe in Pixeln, hochkant // Querschnitt: Pixel pro Einheit
 const SLICE_TOP = 60; // Wasseroberfläche (darüber der Ponton)
 const BEDROCK = 60; // Höhe des Felsbands unten
 
