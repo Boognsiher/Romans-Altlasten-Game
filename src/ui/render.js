@@ -210,6 +210,11 @@ export function drawSlice(ctx, lake, sim) {
   for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(G(c)));
   ctx.lineTo(W, yOf(G(SLICE.cols - 1)));
   ctx.strokeStyle = '#ffd24dcc'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.stroke(); ctx.setLineDash([]);
+  if (sl.h - sl.setH > 0.05) { // eingestellte Höhe der Pumpe: dorthin sinkt sie zurück
+    const hx = (sl.x - sl.x0) * U;
+    ctx.beginPath(); ctx.moveTo(hx - 40, yOf(sl.setH)); ctx.lineTo(hx + 40, yOf(sl.setH));
+    ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+  }
   // Echolot: gemessenes Profil (punktiert) und Zielhöhe für die gewünschte Abtragsdicke (gestrichelt)
   if (sl.sounding) {
     ctx.beginPath();

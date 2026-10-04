@@ -26,7 +26,7 @@ export class SliceSim {
     this.ci = row - this.r0; // Index der angezeigten Zeile im Kasten
     this.x0 = clamp(Math.round(mapX) - SLICE.cols / 2, 0, lake.cols - SLICE.cols); // linke Zelle des Fensters
     this.x = this.x0 + 0.01; // Saugkopf startet links, absolute Zellenkoordinate
-    this.h = Math.min(SLICE.viewH, this.surfaceAt(this.x) + 1.5); // Pumpenhöhe über Grund: schwebt, bis man sie verstellt
+    this.h = Math.min(SLICE.viewH, this.surfaceAt(this.x) + 1.5); // Pumpenhöhe: schwebt, bis man sie verstellt (setzt auch die eingestellte Höhe)
     this.suctioning = false;
     this.moving = false;
     this.speedSetting = speedSetting; // Tempo-Regler: Anteil des Höchsttempos (Katze und Winde)
@@ -41,6 +41,10 @@ export class SliceSim {
     this.auto = { on: false, dir: 'sweep', error: null, errLeft: 0 };
     this.notes = []; // Meldungen für die Oberfläche: { kind, text }
   }
+
+  // h = tatsächliche Höhe, setH = eingestellte Höhe (Kettenlänge). Wer h direkt setzt, stellt auch die Kette ein.
+  get h() { return this._h; }
+  set h(v) { this._h = v; this.setH = v; }
 
   say(kind, text, extra = {}) { this.notes.push({ kind, text, ...extra }); }
 
@@ -165,16 +169,28 @@ export class SliceSim {
 
     const oldX = this.x;
     this.x = clamp(this.x + dx * speed * dt, this.x0, this.x0 + SLICE.cols - P.offsetX - 1e-6);
-    this.h -= dy * speed * dt; // die Pumpe schwebt: nur die Kette (W/S) ändert die Höhe
-    if (a.on && !a.error && this.tilt <= 0.5) { // Automatik regelt die Höhe selbst; Stufe 1 schwebt etwas zu hoch
-      const v = s.headSpeed * this.speedSetting * af * 0.8, target = this.surfaceAt(this.x) + (lvl === 1 ? 0.4 : 0);
-      this.h += clamp(target - this.h, -v * dt, v * dt);
+    const floor = this.surfaceAt(this.x); // nicht in den Grund
+    if (dy) { // Kette von Hand: die neue Höhe ist die eingestellte
+      this._h = clamp(this._h - dy * speed * dt, floor, SLICE.viewH);
+      this.setH = this._h;
     }
-    this.h = Math.max(this.surfaceAt(this.x), Math.min(this.h, SLICE.viewH)); // nicht in den Grund
+    if (a.on && !a.error && this.tilt <= 0.5) { // Automatik regelt die Höhe selbst; Stufe 1 schwebt etwas zu hoch
+      const v = s.headSpeed * this.speedSetting * af * 0.8, target = floor + (lvl === 1 ? 0.4 : 0);
+      this._h += clamp(target - this._h, -v * dt, v * dt);
+      this.setH = this._h;
+    }
+    if (this._h < floor) this._h = floor; // erhöhtes Gelände schiebt die Pumpe nach oben …
+    else if (this._h > this.setH && !dy) { // … danach sinkt sie wieder auf die eingestellte Höhe
+      this._h = Math.max(this.setH, floor, this._h - s.headSpeed * this.speedSetting * 0.8 * dt);
+    }
+    this._h = Math.min(this._h, SLICE.viewH);
+    // zu hoch (über eingestellter Höhe, vom Gelände angehoben): die Pumpe hängt schief an der Kette
+    const lift = Math.max(0, this._h - this.setH - P.liftTolerance), liftGain = lift * P.liftTiltRate * dt;
 
     this.suctioning = working;
     if (!this.suctioning) {
-      this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
+      if (liftGain > 0) this.tilt += liftGain; else this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
+      if (this.tilt >= 1) this._tip();
       return ZERO;
     }
 
@@ -195,17 +211,19 @@ export class SliceSim {
     // Zu tief abgetragen? Pro gefahrene Zelle wird zu viel Material weggesaugt: der Boden bricht
     // vor der Pumpe weg und sie kippt nach vorne. Höher ziehen, schneller fahren oder Ballast helfen.
     const dist = Math.max(Math.abs(this.x - oldX), P.minTravel * dt), cut = res.removed / this.lake.area / dist; // im Stillstand zählt eine Mindestfahrt: wer stehen bleibt, untergräbt den Boden
-    if (cut > s.stability) this.tilt += (cut - s.stability) * P.tiltRate * dt;
+    if (cut > s.stability || liftGain > 0) this.tilt += Math.max(0, cut - s.stability) * P.tiltRate * dt + liftGain;
     else this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);
     if (res.overdug > 1e-6 && this.overNote <= 0) {
       this.say('bad', 'Zu tief abgetragen! Der Seegrund ist jetzt tiefer als bestellt (und der Kanton hat es gemerkt).');
       this.overNote = 8;
     }
-    if (this.tilt >= 1) {
-      this.tilt = 1; this.tipped = P.tipSeconds; this.suctioning = false;
-      this.say('tip', 'Pumpe gekippt! Sie liegt jetzt in der Baugrube und nennt es Mittagspause.');
-    }
+    if (this.tilt >= 1) this._tip();
     return res;
+  }
+
+  _tip() {
+    this.tilt = 1; this.tipped = CONFIG.pump.tipSeconds; this.suctioning = false;
+    this.say('tip', 'Pumpe gekippt! Sie liegt jetzt in der Baugrube und nennt es Mittagspause.');
   }
 }
 

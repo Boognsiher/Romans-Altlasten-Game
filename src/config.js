@@ -55,6 +55,8 @@ export const CONFIG = {
     minTravel: 1.0, // Zellen/s: so schnell gilt die Pumpe mindestens als bewegt (Stillstand = tiefer Schnitt)
     tiltRate: 0.6, // Schieflage pro Sekunde und Einheit Abtragtiefe (m³ pro gefahrene Zelle) über der Standfestigkeit
     tiltRecover: 0.4, // Erholung pro Sekunde
+    liftTolerance: 0.3, // so weit (m) darf Gelände die Pumpe über die eingestellte Höhe heben, ohne dass sie schief hängt
+    liftTiltRate: 0.5, // Schieflage pro Sekunde und Meter darüber
     tipSeconds: 6, // Zeit, bis die Pumpe wieder aufgerichtet ist
     repairCost: 1500, // CHF pro Umkippen (Kran, Taucher, Kaffee)
   },

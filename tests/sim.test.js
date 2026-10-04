@@ -1077,3 +1077,43 @@ test('Steuerungsanzeige: für jede Ansicht und jedes Gerät vorhanden, mit Taste
   assert.ok(HINTS.keys.slice.some(([k]) => k === 'Leertaste')); // Pumpe an/aus
   assert.ok(HINTS.keys.map.some(([k]) => k.includes('E'))); // Anker
 });
+
+test('Pumpe: Hügel schiebt sie hoch, danach sinkt sie auf die eingestellte Höhe zurück', () => {
+  const g = new Game(3);
+  const sim = g.createSession();
+  g.lake.setFlat(2); sim.anchor();
+  const sl = sim.slice;
+  for (let c = 0; c < g.lake.cols; c++) if (c >= sl.x0 + 6 && c < sl.x0 + 8) for (const r of sl.rows) g.lake.top[g.lake.idx(c, r)] = 4.5;
+  sl.h = 3; sl.x = sl.x0 + 5.2;
+  let maxH = 0;
+  for (let i = 0; i < 20; i++) { sl.update(0.1, { dx: 1, dy: 0, suction: false }); maxH = Math.max(maxH, sl.h); }
+  assert.ok(maxH >= 4.5 - 1e-9, 'Hügel hebt die Pumpe');
+  assert.equal(sl.setH, 3);
+  sl.x = sl.x0 + 12;
+  for (let i = 0; i < 100; i++) sl.update(0.1, { dx: 0, dy: 0, suction: false });
+  assert.ok(Math.abs(sl.h - 3) < 1e-9, 'sinkt wieder auf die eingestellte Höhe');
+});
+
+test('Pumpe: Kette von Hand setzt die eingestellte Höhe neu', () => {
+  const g = new Game(3);
+  const sim = g.createSession();
+  g.lake.setFlat(2); sim.anchor();
+  const sl = sim.slice;
+  sl.h = 6;
+  for (let i = 0; i < 5; i++) sl.update(0.1, { dx: 0, dy: 1, suction: false });
+  assert.ok(sl.setH < 6 && Math.abs(sl.setH - sl.h) < 1e-9);
+});
+
+test('Pumpe: zu lange über der eingestellten Höhe gibt Schräglage, sonst erholt sie sich', () => {
+  const g = new Game(3);
+  const sim = g.createSession();
+  g.lake.setFlat(2); sim.anchor();
+  const sl = sim.slice;
+  sl.h = 3; sl.x = sl.x0 + 1;
+  sl._h = 5; // wie vom Gelände angehoben
+  sl.update(0.1, { dx: 0, dy: 0, suction: false });
+  assert.ok(sl.tilt > 0);
+  const t = sl.tilt;
+  for (let i = 0; i < 100; i++) sl.update(0.1, { dx: 0, dy: 0, suction: false });
+  assert.ok(sl.tilt < t); // wieder auf Höhe: erholt sich
+});
