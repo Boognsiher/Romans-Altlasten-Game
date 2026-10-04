@@ -9,7 +9,8 @@ const chain = new Chain();
 let lastT = 0;
 
 export const CELL = 20; // Karte: Pixel pro Zelle
-export const U = 48; // Querschnitt: Pixel pro Einheit
+export const U = 48;
+const PW = 24, PH = 120; // Pumpe in Pixeln: Breite : Höhe = 1 : 5, hochkant // Querschnitt: Pixel pro Einheit
 const SLICE_TOP = 60; // Wasseroberfläche (darüber der Ponton)
 const BEDROCK = 60; // Höhe des Felsbands unten
 
@@ -274,38 +275,35 @@ export function drawSlice(ctx, lake, sim) {
     ctx.beginPath(); ctx.moveTo(2, bottom); ctx.lineTo(W - 2, bottom); ctx.stroke(); ctx.setLineDash([]);
   }
   // Laufkatze auf dem Ponton; die Kette hängt frei und schwingt nach, wenn die Pumpe fährt oder gezogen wird
-  const bodyTop = pump.y - 42, now = performance.now(), dtc = Math.min(0.05, Math.max(0.001, (now - lastT) / 1000));
+  const bodyTop = pump.y - PH - 6, now = performance.now(), dtc = Math.min(0.05, Math.max(0.001, (now - lastT) / 1000));
   lastT = now;
   if (chain.owner !== sl) { chain.reset(); chain.owner = sl; }
   ctx.fillStyle = '#556'; ctx.fillRect(pump.x - 16, 54, 32, 10);
   chain.update(dtc, pump.x, 64, pump.x, bodyTop);
   drawChain(ctx, chain);
   ctx.strokeStyle = '#111'; ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.moveTo(W / 2, 52); ctx.quadraticCurveTo(W / 2, pump.y - 60, pump.x + 14, pump.y - 36); ctx.stroke();
-  // Pumpe: ein einziges Teil an der Kette, Einsaugöffnung unten rechts am Körper.
+  ctx.beginPath(); ctx.moveTo(W / 2, 52); ctx.quadraticCurveTo(W / 2, bodyTop - 20, pump.x + 8, pump.y - PH * 0.8); ctx.stroke();
+  // Pumpe: ein hochkantiges Rechteck (Breite : Höhe = 1 : 5) an der Kette, Einsaugöffnung unten vorne (rechts).
   // Sie pendelt mit der Kette und kippt nach rechts, wenn sie zu tief gräbt.
   ctx.save();
   ctx.translate(pump.x, pump.y);
   ctx.rotate(-chain.endAngle() * 0.6 + sl.tilt * 0.55 + (sl.tipped > 0 ? 0.6 : 0));
-  ctx.fillStyle = '#2b2f33'; ctx.fillRect(-22, -36, 44, 36); // Körper
-  ctx.fillStyle = '#3a4147'; ctx.fillRect(10, -4, 28, 22); // Ansaugstutzen unten rechts
-  ctx.fillStyle = '#0d0f11'; ctx.fillRect(14, 14, 24, 4); // Öffnung
-  ctx.fillStyle = '#7a828a'; ctx.fillRect(-22, -10, 32, 4); ctx.fillRect(-6, -48, 12, 8); // Band, Ösen
+  ctx.fillStyle = '#2b2f33'; ctx.fillRect(-PW / 2, -PH, PW, PH); // Körper
+  ctx.fillStyle = '#7a828a'; ctx.fillRect(-PW / 2, -PH * 0.55, PW, 4); ctx.fillRect(-5, -PH - 6, 10, 8); // Band, Öse
+  ctx.fillStyle = '#0d0f11'; ctx.fillRect(PW / 2 - 6, -14, 6, 14); // Einsaugöffnung unten vorne
   ctx.restore();
-  // Saugradius und Sog an der Einsaugstelle
-  ctx.strokeStyle = sl.suctioning ? '#7fe3ff' : '#ffffff44'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
-  ctx.beginPath(); ctx.arc(mouth.x, mouth.y, sim.stats.radius * U, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  // Sog an der Einsaugstelle
   if (sl.suctioning) {
     ctx.fillStyle = '#7fe3ff55';
     ctx.beginPath(); ctx.moveTo(mouth.x - 12, mouth.y + 4); ctx.lineTo(mouth.x - 30, mouth.y + 28); ctx.lineTo(mouth.x + 40, mouth.y + 28); ctx.lineTo(mouth.x + 12, mouth.y + 4); ctx.fill();
   }
   if (sl.tipped > 0 || sl.tilt > 0.05) {
     ctx.fillStyle = sl.tipped > 0 || sl.tilt > 0.6 ? '#ff7a6b' : '#ffd24d'; ctx.font = 'bold 16px system-ui, sans-serif';
-    ctx.fillText(sl.tipped > 0 ? 'UMGEKIPPT!' : 'Schieflage', Math.max(8, pump.x - 40), Math.max(96, pump.y - 62));
+    ctx.fillText(sl.tipped > 0 ? 'UMGEKIPPT!' : 'Schieflage', Math.max(8, pump.x - 40), Math.max(96, bodyTop - 8));
   }
   if (sl.clog > 0) {
     ctx.fillStyle = '#ff7a6b'; ctx.font = 'bold 18px system-ui, sans-serif';
-    ctx.fillText(`VERSTOPFT ${sl.clog.toFixed(1)}s`, Math.max(8, pump.x - 60), Math.max(116, pump.y - 80));
+    ctx.fillText(`VERSTOPFT ${sl.clog.toFixed(1)}s`, Math.max(8, pump.x - 60), Math.max(116, bodyTop - 28));
   }
   if (sl.auto.on) {
     ctx.fillStyle = sl.auto.error ? '#ff7a6b' : '#7bd88f'; ctx.font = 'bold 16px system-ui, sans-serif';
