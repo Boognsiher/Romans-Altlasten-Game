@@ -68,6 +68,12 @@ body.touch #shift-actions button { padding: 10px 14px; }
   #toast { top: 8px; right: 64px; }
   body.touch #btn-pause2 { width: 44px; height: 44px; }
 }
+/* Steuerung als Overlay: schwebt über dem unteren Bildschirmrand (über dem Panel-Griff), das Spielfeld bleibt oben sichtbar */
+@media (max-width: 860px) {
+  #touch-ui { position: fixed; left: 0; right: 0; bottom: 56px; z-index: 15; padding: 0 12px; pointer-events: none; }
+  #touch-ui > * { pointer-events: auto; opacity: .82; }
+  body { padding-bottom: 260px; }
+}
 @media (max-width: 860px) and (max-height: 720px) {
   #touch-ui { padding: 6px 16px; }
   #stick { width: 108px; height: 108px; } #knob { left: 26px; top: 26px; width: 56px; height: 56px; }
@@ -125,3 +131,13 @@ body.touch #shift-actions button { padding: 10px 14px; }
 /* grosse Bildschirme: Panel und Schrift etwas grösser */
 @media (min-width: 1500px) { main { grid-template-columns: minmax(0, 1fr) 380px; } body { font-size: 16px; } #hints { font-size: 14px; } }
 body.touch #btn-anchor { display: none; } /* auf dem Handy wirft der grosse Knopf den Anker */
+
+/* Handy quer: Aktionsknöpfe als schmale Spalte links, Regler oben rechts, Tastenhinweise aus: das Bild bleibt frei */
+@media (max-width: 860px) and (orientation: landscape) and (max-height: 560px) {
+  #hints { display: none; }
+  body.touch #shift-actions { left: auto; right: 64px; width: auto; align-items: flex-end; flex-direction: column; flex-wrap: nowrap; gap: 4px; }
+  body.touch #shift-actions button { padding: 2px 10px; min-height: 0; height: 28px; font-size: 12px; white-space: nowrap; }
+  body.touch #spd-box, body.touch #cut-box { position: fixed; top: 80px; left: 16px; z-index: 5; }
+  body.touch #cut-box { top: 118px; }
+  #touch-ui { bottom: 4px; }
+}
