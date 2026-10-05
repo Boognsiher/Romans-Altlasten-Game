@@ -1117,3 +1117,29 @@ test('Pumpe: zu lange über der eingestellten Höhe gibt Schräglage, sonst erho
   for (let i = 0; i < 100; i++) sl.update(0.1, { dx: 0, dy: 0, suction: false });
   assert.ok(sl.tilt < t); // wieder auf Höhe: erholt sich
 });
+
+import { serializeGame, restoreGame, savedSummary } from '../src/sim/save.js';
+
+test('Spielstand: speichern und laden ergibt denselben Zustand und dieselbe Zufallsfolge', () => {
+  const g = new Game(7);
+  g.money = 12345; g.day = 9; g.time = 9 * CONFIG.daySeconds; g.levels.pump = 2;
+  g.lake.mass[100] = 0.4; g.lake.top[100] = 3.3; g.lake.accepted[101] = 1;
+  g.addClaim('debris', 'Test', 800);
+  g.rng();
+  const text = serializeGame(g);
+  assert.deepEqual(savedSummary(text), { day: 9, money: 12345, status: 'playing' });
+  const h = restoreGame(text);
+  assert.equal(h.money, 12345); assert.equal(h.day, 9); assert.equal(h.levels.pump, 2);
+  assert.equal(h.claims.length, 1); assert.equal(h.claims[0].text, 'Test');
+  assert.ok(h.lake.mass instanceof Float32Array && h.lake.accepted instanceof Uint8Array);
+  assert.equal(h.lake.mass[100], g.lake.mass[100]); assert.equal(h.lake.accepted[101], 1);
+  assert.equal(h.lake.initialTotal, g.lake.initialTotal);
+  assert.equal(h.rng(), g.rng()); // Zufallsfolge geht gleich weiter
+  assert.ok(h.createSession()); // Ponton lässt sich auf dem geladenen See starten
+});
+
+test('Spielstand: kaputte oder fremde Daten werden abgelehnt', () => {
+  assert.equal(restoreGame('{kaputt'), null);
+  assert.equal(restoreGame(JSON.stringify({ version: 99 })), null);
+  assert.equal(savedSummary('nix'), null);
+});

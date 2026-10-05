@@ -58,3 +58,7 @@ Balancing (alle Zahlen in `src/config.js`), Speichern (localStorage), Sound, Ere
 - **Oben:** Zurück zur Karte, Automatik, Reset, Abtrag-Regler; rechts oben die Pause.
 - **Shop als Fach unten:** Solange es offen ist, steht das Spiel still. Hochkant liegen HUD und Knöpfe unter dem Spielfeld, im Querformat Stick/Knopf an den Seiten.
 - Logik in `src/ui/touch-logic.js` (getestet), DOM in `src/ui/touch.js`. Bisher nur im emulierten Handy-Browser getestet, nicht auf einem echten Gerät.
+
+## Speichern
+
+Das Spiel speichert automatisch im Browser (`localStorage`, Schlüssel `altlasten.save`): bei jedem neuen Spieltag, alle 20 Sekunden, beim Pausieren, beim Öffnen des Panels und beim Verlassen der Seite. Gespeichert werden Geld, Zeit, Upgrades, Anlage, Nachträge, Funde, Aufträge und der Seegrund. Die laufende Pontonfahrt nicht: nach dem Laden steht der Ponton wieder auf der Karte. Im Startbild gibt es "Weiterspielen" und "Neues Spiel"; nach dem Spielende wird der Stand gelöscht (der Rekord bleibt). Code: `src/sim/save.js`.

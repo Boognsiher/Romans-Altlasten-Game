@@ -7,6 +7,7 @@ import { setupTouch } from './ui/touch.js';
 import { steerToward } from './ui/touch-logic.js';
 import { fitSize, renderQuality } from './ui/layout.js';
 import { hintsFor } from './ui/hints.js';
+import { serializeGame, restoreGame, savedSummary } from './sim/save.js';
 import { CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
@@ -18,6 +19,16 @@ const pct = (v) => `${Math.round(v * 100)}%`;
 const BEST_KEY = 'altlasten.best';
 const loadBest = () => { try { const v = localStorage.getItem(BEST_KEY); return v === null ? null : Number(v); } catch { return null; } };
 const saveBest = (v) => { try { localStorage.setItem(BEST_KEY, String(v)); } catch { /* egal */ } };
+
+// Spielstand: automatisch bei jedem neuen Tag, alle 20 s, beim Pausieren und beim Verlassen der Seite
+const SAVE_KEY = 'altlasten.save';
+const readSave = () => { try { return localStorage.getItem(SAVE_KEY); } catch { return null; } };
+const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch { /* egal */ } };
+let saveClock = 0, savedDay = 0;
+function saveGame() {
+  if (game.status !== 'playing' || overlayOpen()) return; // solange das Startbild offen ist, bleibt der alte Stand unangetastet
+  try { localStorage.setItem(SAVE_KEY, serializeGame(game)); savedDay = game.day; saveClock = 0; } catch { /* Speicher voll oder gesperrt: egal */ }
+}
 
 let game = new Game();
 let sim = game.createSession(); // Ponton (Karte/Querschnitt), läuft immer
@@ -313,10 +324,12 @@ function togglePause() {
   paused = !paused;
   $('btn-pause').textContent = paused ? '▶ Weiter (P)' : '⏸ Pause (P)';
   $('btn-pause2').textContent = paused ? '▶' : '⏸';
+  if (paused) saveGame();
 }
 function setSheet(open) {
   sheetOpen = open && narrow();
   $('panel').classList.toggle('open', sheetOpen);
+  if (sheetOpen) saveGame();
   updateClaims();
 }
 
@@ -338,6 +351,7 @@ function endDrone() {
 // ---------- Spielende ----------
 function showEnd() {
   endShown = true;
+  clearSave();
   const e = game.end, t = game.totals, best = loadBest();
   const record = e.finalMoney > 0 && (best === null || e.finalMoney > best); // nur positive Endstände zählen als Rekord
   if (record) saveBest(e.finalMoney);
@@ -350,15 +364,16 @@ function showEnd() {
     Entsorgung ${chf(t.disposalPaid)} · Bussen ${chf(t.finesPaid)} · Bergungen ${chf(t.repairsPaid)} · Übertiefung ${chf(t.overdigPaid)}</small></p>
     <p>Gewonnen hat, wer am Ende am meisten Geld hat.</p>
     <button class="primary" id="btn-restart">Neues Spiel</button>`);
-  $('btn-restart').onclick = restart;
+  $('btn-restart').onclick = () => restart();
 }
 
-function restart() {
-  game = new Game(); sim = game.createSession(); drone = null; paused = false; endShown = false;
+function restart(loaded = null) {
+  game = loaded instanceof Game ? loaded : new Game(); sim = game.createSession(); drone = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
   setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null;
   hideOverlay(); syncMode(); updatePanel();
+  if (!loaded || loaded instanceof Event) clearSave(); else saveGame();
 }
 
 $('btn-drone').onclick = startDrone;
@@ -395,6 +410,8 @@ function frame(now) {
   touch?.setMode(currentMode());
 
   if (running) {
+    saveClock += dt;
+    if (game.day !== savedDay || saveClock > 20) saveGame();
     if (drone) {
       if (readInput.tap('Escape', 'KeyQ')) recall();
       // Die Drohne bleibt in der Bildmitte: Maus/Finger steuern relativ zur Mitte, Tasten und Stick in beide Achsen
@@ -477,6 +494,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+const saved = (() => { const t = readSave(); const m = t && savedSummary(t); return m && m.status === 'playing' ? m : null; })();
 buildUpgrades();
 syncMode();
 updatePanel();
@@ -494,6 +512,17 @@ showOverlay(`<h2>Seesanierung Uetikon</h2>
     <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
     Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> fährst du aus dem verankerten Ponton aus (V oder Knopf): Sie taucht nur im Kasten unter dem Ponton, sieht nur im Lichtkegel in Fahrtrichtung (leicht nach unten) und scannt den Boden, wenn du langsam und nah daran fährst. Sie nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
   <button class="primary" id="btn-go">Los</button>`);
-$('btn-go').onclick = hideOverlay;
+$('btn-go').onclick = () => { if (saved) clearSave(); hideOverlay(); };
+if (saved) {
+  const b = document.createElement('button');
+  b.className = 'primary'; b.id = 'btn-continue';
+  b.textContent = `Weiterspielen (Tag ${saved.day}, ${chf(saved.money)})`;
+  b.onclick = () => { const g = restoreGame(readSave()); if (g) restart(g); else { clearSave(); hideOverlay(); } };
+  $('btn-go').before(b);
+  $('btn-go').textContent = 'Neues Spiel';
+  $('btn-go').classList.remove('primary');
+}
+addEventListener('pagehide', saveGame);
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
 requestAnimationFrame(frame);
 globalThis.__dbg = () => ({ game, sim, drone, mapTarget }); // nur für Browser-Tests

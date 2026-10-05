@@ -11,5 +11,7 @@ export function createRng(seed = 1) {
   next.range = (min, max) => min + next() * (max - min);
   next.int = (min, max) => Math.floor(next.range(min, max + 1));
   next.chance = (p) => next() < p;
+  next.getState = () => a; // für Spielstände: Zufallsfolge an derselben Stelle weiterführen
+  next.setState = (v) => { a = v >>> 0; };
   return next;
 }
