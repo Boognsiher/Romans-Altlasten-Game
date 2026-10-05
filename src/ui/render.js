@@ -1,6 +1,7 @@
 // Zeichnet Karte und Querschnitt. Kennt keine Spiellogik, liest nur Zustand.
 import { SLICE } from '../sim/slice.js';
 import { CONFIG } from '../config.js';
+import { CRANE } from '../sim/crane.js';
 import { Chain, drawChain } from './chain.js';
 
 const CONFIG_FOSSIL_DEPTH = CONFIG.fossils.depthBelowTarget; // Fossilien liegen so tief unter der Sollsohle
@@ -394,4 +395,45 @@ export function drawSlice(ctx, lake, sim) {
 function turbidityVeil(ctx, sim, w, h) {
   ctx.fillStyle = `rgba(160,150,120,${sim.turbidity * 0.55})`;
   ctx.fillRect(0, 0, w, h);
+}
+
+// ---------- Minispiel Kran: Seewasserleitung ausbauen ----------
+export function drawCraneView(ctx, c) {
+  const W = SLICE.cols * U, H = SLICE_TOP + SLICE.viewH * U + BEDROCK, X = (x) => x * U, Y = (h) => yOf(h);
+  ctx.fillStyle = '#0b1620'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, SLICE_TOP, 0, yOf(0));
+  g.addColorStop(0, '#2f7396'); g.addColorStop(1, '#0f2f46');
+  ctx.fillStyle = g; ctx.fillRect(0, SLICE_TOP, W, SLICE.viewH * U);
+  ctx.fillStyle = '#34312d'; ctx.fillRect(0, yOf(0), W, BEDROCK);
+  // Seegrund
+  ctx.beginPath(); ctx.moveTo(0, yOf(0));
+  for (let x = 0; x <= SLICE.cols; x += 0.25) ctx.lineTo(X(x), Y(c.bed(x)));
+  ctx.lineTo(W, yOf(0)); ctx.closePath(); ctx.fillStyle = '#6a5a45'; ctx.fill();
+  ctx.beginPath(); for (let x = 0; x <= SLICE.cols; x += 0.25) (x ? ctx.lineTo : ctx.moveTo).call(ctx, X(x), Y(c.bed(x)));
+  ctx.strokeStyle = '#a58760'; ctx.lineWidth = 3; ctx.stroke();
+  // Transportkahn rechts: Rumpf, Deck und die gelieferten Stücke
+  const dx0 = X(CRANE.deckX0), dw = X(CRANE.deckX1 - CRANE.deckX0), dy = Y(CRANE.deckH);
+  ctx.fillStyle = '#4a5560'; ctx.beginPath(); ctx.moveTo(dx0 - 14, dy); ctx.lineTo(dx0 + dw + 14, dy); ctx.lineTo(dx0 + dw - 10, dy + U * 0.7); ctx.lineTo(dx0 + 10, dy + U * 0.7); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#6b7783'; ctx.fillRect(dx0 - 14, dy - 4, dw + 28, 6);
+  // Ponton oben mit Kran
+  ctx.fillStyle = '#d9dee3'; ctx.fillRect(0, SLICE_TOP - 28, W, 28);
+  ctx.fillStyle = '#e0a020'; ctx.fillRect(X(0.3), SLICE_TOP - 40, 14, 56); // Turm
+  const beamY = Y(CRANE.beamH);
+  ctx.fillRect(X(0.3), beamY - 8, X(15), 10); // Ausleger
+  // Laufkatze, Seil, Haken
+  const hx = X(c.hookX), hy = Y(c.hookH), tx = X(c.tx);
+  ctx.fillStyle = '#333'; ctx.fillRect(tx - 12, beamY - 4, 24, 14);
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tx, beamY + 8); ctx.lineTo(hx, hy); ctx.stroke();
+  // Leitungsstücke
+  for (const s of c.segs) {
+    if (s.state === 'broken') ctx.globalAlpha = 0.45;
+    const cx = X(s.x), cy = Y(s.h), w = X(2), h = U * 0.5;
+    ctx.fillStyle = s.damaged ? '#b9835a' : '#8d98a3'; ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+    ctx.strokeStyle = '#2a3036'; ctx.lineWidth = 2; ctx.strokeRect(cx - w / 2, cy - h / 2, w, h);
+    ctx.fillStyle = '#c9d2d8'; ctx.fillRect(cx - w / 2, cy - h / 2, 8, h); ctx.fillRect(cx + w / 2 - 8, cy - h / 2, 8, h);
+    ctx.fillStyle = '#ffd24d'; ctx.fillRect(cx - 5, cy - h / 2 - 7, 10, 7); // Öse
+    ctx.globalAlpha = 1;
+  }
+  // Haken
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(hx, hy + 8, 9, Math.PI * 0.1, Math.PI * 1.1, false); ctx.stroke();
 }

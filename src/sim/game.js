@@ -1,5 +1,6 @@
 import { CONFIG, UPGRADES, FOSSILS, levelById } from '../config.js';
 import { Lake } from './lake.js';
+import { CraneSim } from './crane.js';
 import { DredgeSim } from './dredge.js';
 import { DroneSim } from './drone.js';
 import { EVENTS } from './events.js';
@@ -30,13 +31,16 @@ export class Game {
     this.cutDepth = CONFIG.echolot.defaultCut; // Abtragsdicke-Sollwert der Automatik
     this.pumpSpeed = CONFIG.pumpSpeed.default; // Tempo-Regler der Pumpe (bleibt gespeichert)
     this.overclock = false; // Anlage übertakten: mehr Durchsatz, höheres Risiko teurer Klassen
-    this.totals = { removed: 0, pay: 0, claimsPaid: 0, claimsFees: 0, claimsAccepted: 0, claimsPartial: 0, claimsRejected: 0, claimsExpired: 0, docPaid: 0, certPaid: 0, certFees: 0, certsApproved: 0, findsPaid: 0, findsFees: 0, findsSold: 0, fossilsLost: 0, fossilFines: 0, jobsDone: 0, jobsFailed: 0, jobsPaid: 0, jobsPenalty: 0, disposalPaid: 0, finesPaid: 0, repairsPaid: 0, overdigPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
+    this.totals = { removed: 0, pay: 0, claimsPaid: 0, claimsFees: 0, claimsAccepted: 0, claimsPartial: 0, claimsRejected: 0, claimsExpired: 0, docPaid: 0, certPaid: 0, certFees: 0, certsApproved: 0, cranePaid: 0, craneFees: 0, craneJobs: 0, findsPaid: 0, findsFees: 0, findsSold: 0, fossilsLost: 0, fossilFines: 0, jobsDone: 0, jobsFailed: 0, jobsPaid: 0, jobsPenalty: 0, disposalPaid: 0, finesPaid: 0, repairsPaid: 0, overdigPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
     this.today = freshDay();
     this.claims = []; // Nachträge: { id, kind, text, fair, markup, status: 'draft' | 'submitted', expiresAt, resolveAt, claimed }
     this.claimAcc = { hard: 0, toxic: 0 }; // gesammelter Mehraufwand, aus dem Nachträge entstehen
     this.claimSeq = 0;
     this.certs = []; // Abnahmezertifikate: { id, serial, x0, r0, rows, cols, cells, fraction, quality, grade, day, premium, status: 'issued' | 'submitted' | 'approved', approveAt }
     this.certSeq = 0;
+    this.craneOffer = null; // Kran-Auftrag: { id, name, segments, payPer, expiresAt } oder null
+    this.craneSeq = 0;
+    this.craneNextAt = CONFIG.crane.firstOfferDay * CONFIG.daySeconds;
     this.finds = []; // Fossilienfunde: { id, name, fee, value, status: 'found' | 'recovering', sellAt }
     this.jobs = []; // Zusatzaufträge der Gemeinde: { id, status: 'offer' | 'active', place, zone, bonus, offerExpiresAt, dueAt, progress }
     this.extraSeq = 0;
@@ -228,6 +232,36 @@ export class Game {
     return true;
   }
 
+  // Kran-Aufträge: ab und zu fragt jemand, ob man seine alte Seewasserleitung ausbauen kann
+  _craneOffers() {
+    const C = CONFIG.crane;
+    if (this.craneOffer && this.time >= this.craneOffer.expiresAt) { this.say('Kran-Auftrag verfallen: die Leitung bleibt halt noch ein Weilchen im See.', 'bad'); this.craneOffer = null; }
+    if (!this.craneOffer && this.time >= this.craneNextAt) {
+      this.craneOffer = { id: ++this.craneSeq, name: 'Seewasserleitung des Wasserwerks ausbauen', segments: C.segments, payPer: C.payPer, expiresAt: this.time + C.expireDays * CONFIG.daySeconds };
+      this.craneNextAt = this.time + this.rng.range(C.everyDays[0], C.everyDays[1]) * CONFIG.daySeconds;
+      const msg = `Kran-Auftrag: ${this.craneOffer.name} (${C.segments} Stücke, ${C.payPer} CHF je Stück)`;
+      this.say(msg, 'info'); this.notify(msg, 'info');
+    }
+  }
+
+  // Kran einsetzen: kostet eine Pauschale (Kranführer, Kaffee) und liefert das Minispiel
+  startCrane() {
+    if (!this.craneOffer || this.status !== 'playing' || this.money < CONFIG.crane.fee) return null;
+    this.money -= CONFIG.crane.fee; this.totals.craneFees += CONFIG.crane.fee;
+    return new CraneSim(this.rng, { segments: this.craneOffer.segments });
+  }
+
+  // Abrechnung: intakte Stücke voll, beschädigte anteilig, zerbrochene kosten eine Busse; alle intakt = Bonus. Wurde nichts geliefert, bleibt der Auftrag offen.
+  finishCrane(c) {
+    const C = CONFIG.crane, r = c.result, intact = r.delivered - r.damaged;
+    const pay = Math.round(intact * C.payPer + r.damaged * C.payPer * C.damagedShare + (r.delivered === c.segs.length && r.damaged === 0 && r.broken === 0 ? C.allBonus : 0));
+    const fine = r.broken * C.brokenFine;
+    this.money += pay - fine; this.totals.cranePaid += pay; this.totals.finesPaid += fine;
+    if (r.delivered + r.broken > 0) { this.craneOffer = null; this.totals.craneJobs++; }
+    this.say(`Kran: ${r.delivered} Stücke geliefert (${r.damaged} beschädigt), ${r.broken} zerbrochen. ${pay ? `+${pay} CHF` : ''}${fine ? ` Busse −${fine} CHF` : ''}`, r.broken ? 'bad' : 'good');
+    return { pay, fine, ...r, total: c.segs.length };
+  }
+
   _certs() {
     for (const c of this.certs) {
       if (c.status !== 'submitted' || this.time < c.approveAt) continue;
@@ -348,6 +382,7 @@ export class Game {
     this._plant(dt);
     this._claims();
     this._certs();
+    this._craneOffers();
     this._finds();
     this._jobs(dt);
     const day = Math.floor(this.time / CONFIG.daySeconds) + 1;

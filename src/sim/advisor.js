@@ -73,6 +73,8 @@ export class Advisor {
         text: () => 'Du hast ein Zertifikat in der Schublade! Reich es beim Kanton ein (Panel, Zertifikate). Nach 3 Tagen gibt es die Prämie, besser ist sie bei guter Qualität.' },
       { id: 'jobs', prio: 65, when: () => game.jobs.some((j) => j.status === 'offer'),
         text: () => 'Die Gemeinde hat einen Zusatzauftrag mit Prämie angeboten (Panel, Zusatzaufträge). Zone sauber machen und kassieren, aber die Frist läuft!' },
+      { id: 'crane', prio: 62, when: () => !!game.craneOffer,
+        text: () => `Ein Kran-Auftrag wartet: die alte Seewasserleitung muss raus (Panel, Zusatzaufträge). Haken über die gelbe Öse, greifen, zum Kahn rechts fahren und sanft absetzen. Aus der Höhe fallen lassen mag das Rohr gar nicht.` },
       { id: 'finds', prio: 55, when: () => game.finds.some((f) => f.status === 'found'),
         text: () => 'Die Drohne hat einen Fund gemeldet. Bergen lohnt sich meistens, das Museum zahlt (Panel, Funde). Nicht zu tief saugen, sonst ist es Kies.' },
       { id: 'claims', prio: 50, when: () => game.openClaims >= 2,

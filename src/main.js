@@ -12,7 +12,7 @@ import { Advisor } from './sim/advisor.js';
 import { checkPassword } from './ui/gate.js';
 import { createAudio } from './ui/audio.js';
 import { serializeGame, restoreGame, savedSummary } from './sim/save.js';
-import { view, CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
+import { view, CELL, drawCraneView, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
@@ -51,6 +51,8 @@ const audio = createAudio();
 let game = new Game();
 let sim = game.createSession(); // Ponton (Karte/Querschnitt), läuft immer
 let drone = null; // aktiver Drohnenflug, sonst null
+let crane = null; // aktives Kran-Minispiel, sonst null
+const busy = () => !!(drone || crane); // Minispiel läuft: der Ponton ruht
 let paused = false;
 let endShown = false;
 const readInput = createInput(canvas);
@@ -309,7 +311,7 @@ function updateHud() {
   $('h-best').textContent = best === null ? '–' : chf(best);
 }
 
-function updatePanel() { updateUpgrades(); updatePlant(); updateClaims(); updateFinds(); updateJobs(); updateLog(); $('btn-drone').textContent = `Drohne ausbringen (${chf(CONFIG.drone.fee)})`; }
+function updatePanel() { updateCraneOffer(); updateUpgrades(); updatePlant(); updateClaims(); updateFinds(); updateJobs(); updateLog(); $('btn-drone').textContent = `Drohne ausbringen (${chf(CONFIG.drone.fee)})`; }
 
 // ---------- Overlay, Toast ----------
 function showOverlay(html) { const o = $('overlay'); o.innerHTML = `<div>${html}</div>`; o.classList.add('show'); }
@@ -362,7 +364,7 @@ function fitCanvas() {
   let { w, h } = fitSize(stage.clientWidth, availH, lw, lh);
   // Handy hochkant, Querschnitt: der freie Platz geht in einen Zoom; das Bild folgt der Pumpe seitlich (panCanvas)
   zoom = 1;
-  if (!drone && sim.mode === 'slice' && narrow() && matchMedia('(orientation: portrait)').matches) {
+  if (!busy() && sim.mode === 'slice' && narrow() && matchMedia('(orientation: portrait)').matches) {
     zoom = Math.min(MAX_ZOOM, Math.max(1, (innerHeight - docTop - below - 12) / h));
     w *= zoom; h *= zoom;
   }
@@ -385,25 +387,26 @@ function updateHints() {
 }
 
 // ---------- Modus: Karte / Querschnitt / Drohne ----------
-const currentMode = () => (drone ? 'drone' : sim.mode);
+const currentMode = () => (drone ? 'drone' : crane ? 'crane' : sim.mode);
 function syncMode() {
   const mode = currentMode();
   fx.clear(); audio.hum(false, 0);
-  const size = mode === 'slice' || mode === 'drone' ? 'slice' : 'map';
+  const size = mode === 'slice' || mode === 'drone' || mode === 'crane' ? 'slice' : 'map';
   if (size !== shownSize) { size === 'slice' ? sizeSlice(canvas) : sizeMap(canvas, game.lake); shownSize = size; }
   $('shift-hud').hidden = false;
   $('shift-actions').hidden = false;
   $('row-box').hidden = mode !== 'slice';
   $('btn-anchor').hidden = mode !== 'map'; $('btn-leave').hidden = mode !== 'slice';
-  $('btn-drone2').hidden = mode !== 'slice'; $('btn-pump').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone';
-  $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne' }[mode];
+  $('btn-drone2').hidden = mode !== 'slice'; $('btn-pump').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone' && mode !== 'crane';
+  $('btn-recall').textContent = mode === 'crane' ? '↩ Kran abbrechen (Q)' : '↩ Drohne einholen (Q)';
+  $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne', crane: 'Kran' }[mode];
   if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; $('spd-box').hidden = true; }
   $('btn-drone').disabled = mode !== 'slice';
   updateHints(); fitCanvas();
 }
-function anchor() { if (!drone && sim.anchor()) syncMode(); }
-function leave() { if (!drone && sim.leave()) syncMode(); }
-function toggleAuto() { if (!drone) sim.toggleAuto(); }
+function anchor() { if (!busy() && sim.anchor()) syncMode(); }
+function leave() { if (!busy() && sim.leave()) syncMode(); }
+function toggleAuto() { if (!busy()) sim.toggleAuto(); }
 function toggleSound() { audio.setMuted(!audio.muted); for (const id of ['btn-sound', 'btn-sound2']) $(id).textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
 // Zeilenwahl: der Kasten hat mehrere Zeilen, jede wird einzeln gefahren
 const rowChips = [];
@@ -417,7 +420,7 @@ function buildRows() {
   }
 }
 function selectRow(k) {
-  if (drone || sim.mode !== 'slice' || !sim.slice.selectRow(k)) return;
+  if (busy() || sim.mode !== 'slice' || !sim.slice.selectRow(k)) return;
   fx.clear(); toast(`Zeile ${sim.slice.ci + 1} von ${CONFIG.box.rows}`, 'info');
 }
 function updateRows() {
@@ -464,7 +467,7 @@ function setBruno(on) {
   if (!on) closeBruno();
 }
 function togglePump() {
-  if (drone) return;
+  if (busy()) return;
   if (sim.mode === 'slice' && sim.slice.freeing) { // verstopft: der Knopf löst das Freispül-Minispiel aus
     const r = sim.freeAttempt();
     if (r) { audio.free(r); fx.burst(sliceMouthScreen(sim.slice).x, sliceMouthScreen(sim.slice).y, r === 'cleared' ? 24 : r === 'hit' ? 8 : 4, r === 'miss' ? 'dust' : 'hard', r === 'cleared' ? 220 : 120); }
@@ -473,7 +476,7 @@ function togglePump() {
   }
   if (sim.togglePump()) audio.toggle(sim.pumpOn);
 }
-function fixAuto() { if (!drone) sim.fixAuto(); }
+function fixAuto() { if (!busy()) sim.fixAuto(); }
 function setCut(v) {
   sim.setCutDepth(v);
   game.cutDepth = sim.cutDepth;
@@ -499,11 +502,46 @@ function setSheet(open) {
 
 // Drohne ausbringen: taucht nur im Kasten unter dem verankerten Ponton
 function startDrone() {
-  if (sim.mode !== 'slice' || drone) return;
+  if (sim.mode !== 'slice' || busy()) return;
   drone = game.startDrone({ x0: sim.slice.x0, row: sim.slice.row, r0: sim.slice.r0 });
   syncMode();
 }
-function recall() { if (drone) { drone.timeLeft = 0; drone.over = true; } }
+function recall() { if (drone) { drone.timeLeft = 0; drone.over = true; } else if (crane) crane.over = true; }
+
+// Kran-Minispiel (Seewasserleitung ausbauen)
+function startCrane() {
+  if (busy() || !game.craneOffer) return;
+  const c = game.startCrane();
+  if (!c) { toast(`Zu wenig Geld für den Kranführer (${chf(CONFIG.crane.fee)})`, 'bad'); return; }
+  crane = c; setSheet(false); syncMode();
+  toast('Kran: Haken über die gelbe Öse, greifen, zum Kahn rechts fahren und sanft absetzen', 'info');
+}
+function craneAction() {
+  if (!crane) return;
+  const r = crane.action();
+  if (r) audio.free(r === 'grab' ? 'hit' : r === 'miss' ? 'miss' : 'cleared');
+}
+function endCrane() {
+  const r = game.finishCrane(crane);
+  crane = null;
+  syncMode();
+  const msg = r.delivered + r.broken === 0 ? 'Kran: nichts geliefert, der Auftrag bleibt offen' : `Kran: ${r.delivered}/${r.total} geliefert${r.damaged ? `, ${r.damaged} beschädigt` : ''}${r.broken ? `, ${r.broken} zerbrochen (−${chf(r.fine)})` : ''}. ${r.pay ? `+${chf(r.pay)}` : ''}`;
+  toast(msg, r.broken || !r.delivered ? 'bad' : 'good');
+}
+function updateCraneOffer() {
+  const o = game.craneOffer, box = $('crane-offer');
+  const sig = o ? `${o.id}:${busy()}:${game.money >= CONFIG.crane.fee}` : 'none';
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  if (!o) { box.replaceChildren(); return; }
+  const row = document.createElement('div'); row.className = 'claim';
+  const t = document.createElement('b'); t.textContent = `Kran-Auftrag: ${o.name}`;
+  const info = document.createElement('small'); info.textContent = `${o.segments} Stücke, ${chf(o.payPer)} je Stück (+${chf(CONFIG.crane.allBonus)} Bonus, wenn alle heil ankommen). Zerbrochene Stücke kosten ${chf(CONFIG.crane.brokenFine)}.`;
+  const line = document.createElement('div'); line.className = 'row';
+  const b = document.createElement('button'); b.className = 'primary'; b.textContent = `Kran einsetzen (−${chf(CONFIG.crane.fee)})`;
+  b.disabled = busy() || game.money < CONFIG.crane.fee; b.onclick = startCrane;
+  line.append(b); row.append(t, info, line); box.replaceChildren(row);
+}
 function endDrone() {
   const r = game.finishDrone(drone);
   drone = null;
@@ -558,7 +596,7 @@ function showLevels(note = '') {
 }
 
 function restart(loaded = null) {
-  game = loaded instanceof Game ? loaded : new Game(undefined, typeof loaded === 'string' ? loaded : game.levelId); sim = game.createSession(); drone = null; paused = false; endShown = false;
+  game = loaded instanceof Game ? loaded : new Game(undefined, typeof loaded === 'string' ? loaded : game.levelId); sim = game.createSession(); drone = null; crane = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
   setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null; certSig = null;
@@ -584,9 +622,9 @@ $('panel-handle').onclick = () => setSheet(!sheetOpen);
 addEventListener('resize', () => { if (sheetOpen && !narrow()) setSheet(false); });
 
 // Touch: Stick, Aktionsknopf, Tippen auf die Karte
-const touch = isTouch ? setupTouch(readInput, { anchor, recall, togglePump }) : null;
+const touch = isTouch ? setupTouch(readInput, { anchor, recall, togglePump, craneAction }) : null;
 readInput.onTap((px, py) => {
-  if (drone || sim.mode !== 'map' || paused || sheetOpen || overlayOpen()) return;
+  if (busy() || sim.mode !== 'map' || paused || sheetOpen || overlayOpen()) return;
   mapTarget = { x: Math.min(sim.lake.cols, Math.max(0, px / CELL)), y: Math.min(sim.lake.rows, Math.max(0, py / CELL)) };
 });
 $('btn-anchor').onclick = anchor;
@@ -619,6 +657,19 @@ function frame(now) {
       $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${done}/16 Spalten gescannt · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
       if (drone.over) endDrone();
+    } else if (crane) {
+      if (readInput.tap('Escape', 'KeyQ')) recall();
+      if (readInput.tap('Space', 'Enter')) craneAction();
+      crane.update(dt, readInput.read({ x: 0, y: 0 }, { keysOnly: true }));
+      $('s-removed').textContent = `Kran: ${crane.result.delivered}/${crane.segs.length} geliefert · ${Math.ceil(crane.timeLeft)}s${crane.carried ? ' · Last am Haken' : ''}`;
+      $('s-turb').value = 0; $('s-tilt').value = 0;
+      for (const ev of crane.events.splice(0)) {
+        if (ev.kind === 'deliver') { audio.free('cleared'); toast('Stück geliefert!', 'good'); }
+        else if (ev.kind === 'damage') toast('Hart aufgesetzt: Stück beschädigt', 'bad');
+        else if (ev.kind === 'break') { audio.clog(); toast('Stück zerbrochen! (Busse)', 'bad'); }
+        else if (ev.kind === 'splash') toast('Platsch: das Stück liegt wieder am Grund', 'info');
+      }
+      if (crane.over) endCrane();
     } else {
       const inMap = sim.mode === 'map';
       const cur = inMap ? { x: sim.x * CELL, y: sim.y * CELL } : sliceHeadScreen(sim.slice);
@@ -690,7 +741,7 @@ function frame(now) {
     brunoTimer += dt;
     if (brunoTimer > 1) { // höchstens einmal pro Sekunde prüfen; nicht mitten im Minispiel oder Drohnenflug
       brunoTimer = 0;
-      if (advisor.enabled && !drone && !(sim.mode === 'slice' && (sim.slice.freeing || sim.slice.tipped > 0))) { const tip = advisor.pick(game, sim); if (tip) showBruno(tip); }
+      if (advisor.enabled && !busy() && !(sim.mode === 'slice' && (sim.slice.freeing || sim.slice.tipped > 0))) { const tip = advisor.pick(game, sim); if (tip) showBruno(tip); }
     }
     for (const n of game.notes.splice(0)) toast(n.text, n.kind);
   }
@@ -701,9 +752,10 @@ function frame(now) {
   updateHud();
   if (game.status === 'ended' && !endShown) { updatePanel(); showEnd(); }
 
-  if (sim.mode !== 'map' || drone) mapTarget = null;
+  if (sim.mode !== 'map' || busy()) mapTarget = null;
   ctx.setTransform(canvas.q || 1, 0, 0, canvas.q || 1, 0, 0); // logische Koordinaten, Auflösung passend zur Anzeige
   if (drone) drawDroneView(ctx, game.lake, drone);
+  else if (crane) drawCraneView(ctx, crane);
   else if (sim.mode === 'slice') {
     const o = fx.offset();
     ctx.save(); ctx.translate(o.x, o.y); drawSlice(ctx, game.lake, sim); fx.draw(ctx); ctx.restore();
@@ -775,4 +827,4 @@ if (!CONFIG.passwordHash || unlocked()) showIntro(); else showGate();
 addEventListener('pagehide', saveGame);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
 requestAnimationFrame(frame);
-globalThis.__dbg = () => ({ game, sim, drone, mapTarget }); // nur für Browser-Tests
+globalThis.__dbg = () => ({ game, sim, drone, crane, mapTarget }); // nur für Browser-Tests

@@ -1340,7 +1340,8 @@ test('Automatik startet dort, wo sie eingeschaltet wird: links davon bleibt alle
   assert.equal(R, CONFIG.box.rows);
 });
 
-import { drawMap, drawSlice, drawDroneView, view } from '../src/ui/render.js';
+import { CraneSim, CRANE } from '../src/sim/crane.js';
+import { drawMap, drawSlice, drawDroneView, drawCraneView, view } from '../src/ui/render.js';
 
 // Zeichentest mit Attrappe: fängt Programmierfehler beim Zeichnen ab (z. B. verdeckte Namen), die sonst die ganze Spielschleife anhalten
 const mockCtx = () => new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'createLinearGradient' || k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : k === 'measureText' ? () => ({ width: 10 }) : () => {})), set: (t, k, v) => { t[k] = v; return true; } });
@@ -1358,6 +1359,7 @@ test('Zeichnen: Karte (mit Auftrag), Querschnitt (mit Verstopfung, Zertifikat-Sp
     drawSlice(mockCtx(), g.lake, sim);
     const d = g.startDrone({ x0: sl.x0, row: sl.row, r0: sl.r0 });
     drawDroneView(mockCtx(), g.lake, d);
+    const cr = new CraneSim(createRng(3)); cr.update(0.1, { dx: 1, dy: 1 }); cr.action(); drawCraneView(mockCtx(), cr);
   }
   view.s = 1;
 });
@@ -1418,4 +1420,54 @@ test('Automatik: sie schaltet die Pumpe ein, ein manuelles Ausschalten gilt (sie
   for (let t = 0; t < 1500 && sl.auto.on; t += 0.05) { sim.update(0.05, {}); }
   assert.equal(sl.auto.on, false); assert.equal(sim.pumpOn, false);
   assert.ok(x1 > 0);
+});
+
+
+test('Kran: nur nahe am Stück greifen, Pendel schwingt aus, sanft auf dem Kahn absetzen liefert, hart fallen lassen beschädigt/zerbricht', () => {
+  const rng = createRng(4), c = new CraneSim(rng, { segments: 2 });
+  const seg = c.segs[0];
+  assert.equal(c.action(), 'miss'); // Haken weit weg
+  // über das Stück fahren und absenken
+  c.tx = seg.x; c.L = CRANE.beamH - (seg.h + 0.25); c.theta = 0; c.omega = 0;
+  assert.equal(c.action(), 'grab'); assert.equal(c.carried, seg);
+  // anheben, zum Kahn fahren (Pendeln darf nicht explodieren)
+  for (let i = 0; i < 100; i++) c.update(0.05, { dx: 0, dy: -1 });
+  for (let i = 0; i < 300; i++) c.update(0.05, { dx: c.tx < 13.5 ? 1 : 0, dy: 0 });
+  assert.ok(Math.abs(c.theta) < 1.1);
+  for (let i = 0; i < 400; i++) c.update(0.05, { dx: 0, dy: 1 }); // absenken (bis zum Anschlag, bleibt über dem Kahn?)
+  // sanft: Haken knapp über dem Deck, loslassen
+  c.theta = 0; c.omega = 0; c.tx = 13.8; c.L = CRANE.beamH - (c._deckTop() + 0.9); seg.x = c.hookX; seg.h = c.hookH - 0.45;
+  assert.equal(c.action(), 'drop');
+  for (let i = 0; i < 60; i++) c.update(0.05, {});
+  assert.equal(seg.state, 'delivered'); assert.equal(c.result.delivered, 1);
+  // von ganz oben fallen lassen: zerbricht
+  const s2 = c.segs[1]; s2.state = 'carried'; c.carried = s2; s2.x = 6; s2.h = 5; c.action();
+  for (let i = 0; i < 80; i++) c.update(0.05, {});
+  assert.equal(s2.state, 'broken'); assert.equal(c.result.broken, 1);
+  assert.ok(c.over, 'alle erledigt = Ende');
+});
+
+test('Kran: Zeitlimit beendet das Spiel; Auftrag erscheint, verfällt, wird abgerechnet (intakt, beschädigt, Busse, Bonus)', () => {
+  const g = new Game(61), C = CONFIG.crane;
+  assert.equal(g.craneOffer, null);
+  g.update(C.firstOfferDay * CONFIG.daySeconds + 1);
+  assert.ok(g.craneOffer && g.craneOffer.segments === C.segments);
+  const m0 = g.money, cr = g.startCrane(); assert.ok(cr); assert.equal(g.money, m0 - C.fee);
+  cr.timeLeft = 0.01; cr.update(0.05, {}); assert.ok(cr.over);
+  let r = g.finishCrane(cr); assert.equal(r.pay, 0); assert.ok(g.craneOffer, 'nichts geliefert: Auftrag bleibt offen');
+  const c2 = new CraneSim(createRng(1), { segments: 4 }); c2.result = { delivered: 4, damaged: 0, broken: 0 };
+  const m1 = g.money; r = g.finishCrane(c2);
+  assert.equal(r.pay, 4 * C.payPer + C.allBonus); assert.equal(g.money, m1 + r.pay); assert.equal(g.craneOffer, null);
+  const c3 = new CraneSim(createRng(1), { segments: 4 }); c3.result = { delivered: 2, damaged: 1, broken: 1 };
+  const m2 = g.money; r = g.finishCrane(c3);
+  assert.equal(r.pay, C.payPer + C.payPer * C.damagedShare); assert.equal(r.fine, C.brokenFine); assert.equal(g.money, m2 + r.pay - r.fine);
+  // Verfall
+  g.craneNextAt = g.time; g.update(0.1); const exp = g.craneOffer.expiresAt; g.update(exp - g.time + 1); assert.ok(!g.craneOffer || g.craneOffer.id !== undefined);
+});
+
+test('Kran: die Laufkatze erreicht den Transportkahn', () => {
+  const c = new CraneSim(createRng(8));
+  for (let i = 0; i < 200 && c.tx < 13.5; i++) c.update(0.05, { dx: 1, dy: 0 });
+  assert.ok(c.tx >= 13.5 && c.tx <= CRANE.deckX1 - 0.3 + 1.2);
+  assert.ok(c.hookX > CRANE.deckX0, 'Haken über dem Kahn');
 });
