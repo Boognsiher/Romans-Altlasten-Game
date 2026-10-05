@@ -4,6 +4,7 @@ import { snapStick } from './touch-logic.js';
 // (Karte: Anker werfen, Querschnitt: Saugen halten). Beide arbeiten unabhängig voneinander (Mehrfinger).
 const KNOB_RADIUS = 38;
 const DEAD = 5; // Totzone des Sticks in Pixeln: klein, damit der Ponton sofort losfährt
+const DRONE_DEAD = 14, DRONE_RAMP = KNOB_RADIUS * 1.4; // Drohne darf träger sein: grössere Totzone, langsamer Anlauf
 
 export function setupTouch(input, hooks) {
   const root = document.getElementById('touch-ui'), stick = document.getElementById('stick'), knob = document.getElementById('knob');
@@ -19,7 +20,7 @@ export function setupTouch(input, hooks) {
     const r = stick.getBoundingClientRect(), vx = e.clientX - (r.left + r.width / 2), vy = e.clientY - (r.top + r.height / 2);
     let s;
     if (analog) { // stufenlos: Ausschlag = Tempo
-      const len = Math.hypot(vx, vy), k = len < DEAD ? 0 : Math.min(1, len / KNOB_RADIUS) / len;
+      const len = Math.hypot(vx, vy), k = len < DRONE_DEAD ? 0 : Math.min(1, len / DRONE_RAMP) / len;
       s = { dx: vx * k, dy: vy * k };
     } else s = snapStick(vx, vy, DEAD, input.virtual);
     input.virtual.dx = s.dx; input.virtual.dy = s.dy;

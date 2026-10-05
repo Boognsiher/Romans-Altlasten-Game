@@ -45,13 +45,13 @@ export function createInput(canvas) {
     virtual,
     onTap(fn) { tapHandler = fn; }, // Tippen aufs Spielfeld (Canvas-Pixel)
     // cur = Position des gesteuerten Objekts in Canvas-Pixeln. holdToMove: Maus steuert nur bei gedrückter Taste.
-    read(cur, { holdToMove = false } = {}) {
+    read(cur, { holdToMove = false, soft = false } = {}) {
       let dx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       let dy = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
       if (!dx && !dy) { dx = virtual.dx; dy = virtual.dy; } // Touch-Stick
       if (!dx && !dy && pointer.active && (!holdToMove || pointer.down)) {
         const tx = pointer.x - cur.x, ty = pointer.y - cur.y, d = Math.hypot(tx, ty);
-        if (d > 4) { const k = Math.min(1, d / 16); // schon kleiner Abstand = volles Tempo, ohne Anlaufphase
+        if (d > (soft ? 8 : 4)) { const k = Math.min(1, d / (soft ? 40 : 16)); // schon kleiner Abstand = volles Tempo, ohne Anlaufphase
           dx = (tx / d) * k; dy = (ty / d) * k; }
       }
       return { dx, dy, suction: keys.has('Space') || pointer.down || virtual.suction };

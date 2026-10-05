@@ -415,7 +415,7 @@ function frame(now) {
     if (drone) {
       if (readInput.tap('Escape', 'KeyQ')) recall();
       // Die Drohne bleibt in der Bildmitte: Maus/Finger steuern relativ zur Mitte, Tasten und Stick in beide Achsen
-      drone.update(dt, readInput.read({ x: canvas.logicalW / 2, y: canvas.logicalH / 2 }, { holdToMove: true }));
+      drone.update(dt, readInput.read({ x: canvas.logicalW / 2, y: canvas.logicalH / 2 }, { holdToMove: true, soft: true }));
       const done = drone.scanned.reduce((a, v) => a + v, 0);
       $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${done}/16 Spalten gescannt · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
