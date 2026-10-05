@@ -5,6 +5,7 @@ const COLORS = { normal: '#b99a6c', toxic: '#ff7a3d', hard: '#9aa1a8', dust: '#8
 export class Fx {
   constructor(rng = Math.random) {
     this.rng = rng;
+    this.colors = { ...COLORS };
     this.parts = []; // { x, y, vx, vy, life, max, size, color, home: {x, y} | null }
     this.floaters = []; // { x, y, text, life, color }
     this.shake = 0; // 0..1
@@ -21,7 +22,7 @@ export class Fx {
       const n = Math.min(10, Math.ceil(d.removed * 40)), r = this.rng;
       for (let i = 0; i < n && this.parts.length < 260; i++) {
         const kind = r() < d.toxicRemoved / d.removed ? 'toxic' : r() < d.hardRemoved / d.removed ? 'hard' : 'normal';
-        this.parts.push({ x: m.x + (r() - 0.5) * 70, y: surfY + r() * 10, vx: (r() - 0.5) * 30, vy: -r() * 30, life: 0, max: 0.7 + r() * 0.5, size: 2 + r() * 2.5, color: COLORS[kind], home: m });
+        this.parts.push({ x: m.x + (r() - 0.5) * 70, y: surfY + r() * 10, vx: (r() - 0.5) * 30, vy: -r() * 30, life: 0, max: 0.7 + r() * 0.5, size: 2 + r() * 2.5, color: this.colors[kind], home: m });
       }
       if (d.hardRemoved > 0) this.shake = Math.max(this.shake, 0.25);
       if (d.toxicRemoved > 0 && r() < 0.3) this.floaters.push({ x: m.x + (r() - 0.5) * 30, y: m.y - 14, text: '☢', life: 0.9, color: '#ff7a3d' });
@@ -32,7 +33,7 @@ export class Fx {
   burst(x, y, count, kind = 'hard', power = 160) {
     for (let i = 0; i < count && this.parts.length < 260; i++) {
       const a = this.rng() * Math.PI * 2, v = power * (0.3 + this.rng() * 0.7);
-      this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: 0, max: 0.6 + this.rng() * 0.6, size: 3 + this.rng() * 4, color: COLORS[kind], home: null });
+      this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: 0, max: 0.6 + this.rng() * 0.6, size: 3 + this.rng() * 4, color: this.colors[kind], home: null });
     }
     this.shake = Math.max(this.shake, kind === 'dust' ? 1 : 0.6);
   }
@@ -71,6 +72,8 @@ export class Fx {
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'start';
   }
+
+  setTheme(p) { this.colors = { ...COLORS, ...(p?.particle ? { normal: p.particle } : {}) }; }
 
   clear() { this.parts = []; this.floaters = []; this.shake = 0; this.pay = 0; }
 }

@@ -1,4 +1,4 @@
-# Seesanierung Uetikon – das Spiel
+# Seesanierung – das Spiel
 
 Der Seegrund wird mit Ponton und Saugpumpe saniert. Fläche abfahren, Schlamm absaugen, Punkte sammeln,
 Entsorgung aus den Tranchen bezahlen, Ausrüstung ausbauen.
@@ -93,3 +93,7 @@ Der Kasten hat 5 Zeilen (`CONFIG.box.rows`). Die Pumpe bearbeitet nur die **gew�
 ## Gesamtbewertung und Zertifikat
 
 Nach jedem Drohnenflug wird der ganze Kasten (16 Spalten x 5 Zeilen) bewertet: Sind mindestens 90 % der bestellten Zellen abgenommen (`CONFIG.cert.minFraction`), stellt die Drohne ein **Abnahmezertifikat** aus (jede Zelle nur einmal, mindestens 10 neue Zellen). Es lässt sich ansehen und für 300 CHF beim Kanton einreichen; nach 3 Spieltagen Bearbeitung gibt der Kanton es frei und zahlt die **Prämie**. Die Prämie steigt mit der Qualität: Anteil sauberer Zellen über der Mindestquote (90 % = Bronze, 100 % = Gold, bis doppelte Prämie), abzüglich Zellen, die zu tief abgetragen wurden. Zertifikate stehen im Panel unter "Zertifikate" und werden mitgespeichert. Nicht eingereichte oder noch nicht freigegebene Zertifikate bringen bei Spielende nichts.
+
+## Levels
+
+Das Spiel heisst jetzt "Seesanierung" und hat mehrere Seen (`LEVELS` in `src/config.js`): **Uetikon** (braune Altlasten, der Klassiker), **Horgen: Papierfabrik** (weisser Faserbrei, flach, grosse Fläche, viel Büro-Inventar, milchige Trübung, etwas tiefere Vergütung) und **Richterswil: Landzunge Horn** (steil, viel harte Moräne, viele Pfahlbau-Funde, bessere Vergütung). Jedes Level hat eigene Farbe, Fremdstoff- und Fundnamen, Startgeld und Tempo der Trübung. Die Auswahl erscheint beim "Neuen Spiel"; ein Level wird freigeschaltet, wenn das vorherige mit Gewinn abgeschlossen ist. Rekorde und Spielstand gelten je Level.

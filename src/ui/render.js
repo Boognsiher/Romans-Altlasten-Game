@@ -19,9 +19,13 @@ function setLogical(canvas, w, h) { canvas.logicalW = w; canvas.logicalH = h; ca
 export function sizeMap(canvas, lake) { setLogical(canvas, lake.cols * CELL, lake.rows * CELL); }
 export function sizeSlice(canvas) { setLogical(canvas, SLICE.cols * U, SLICE_TOP + SLICE.viewH * U + BEDROCK); }
 
+// Farben der belasteten Schicht je Level (Uetikon braun, Horgen weiss, Horn grün)
+const PAL = { layer: '#7a5f3c', edge: '#a58760', map: [120, 95, 60] };
+const palOf = (lake) => ({ ...PAL, ...(lake.theme?.palette ?? {}) });
+
 // ---------- Instanz 1: Karte ----------
 export function drawMap(ctx, lake, sim, jobs = []) {
-  const { cols, rows, mass, toxic } = lake;
+  const { cols, rows, mass, toxic } = lake, pal = palOf(lake);
   ctx.fillStyle = '#12304a';
   ctx.fillRect(0, 0, cols * CELL, rows * CELL);
   for (let y = 0; y < rows; y++) {
@@ -29,7 +33,7 @@ export function drawMap(ctx, lake, sim, jobs = []) {
       const i = y * cols + x, m = mass[i];
       if (m <= 0) continue;
       const a = 0.35 + 0.55 * Math.min(1, m);
-      ctx.fillStyle = toxic[i] ? `rgba(200,70,60,${a})` : `rgba(120,95,60,${a})`;
+      ctx.fillStyle = toxic[i] ? `rgba(200,70,60,${a})` : `rgba(${pal.map[0]},${pal.map[1]},${pal.map[2]},${a})`;
       ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
       if (lake.hard[i]) { // Schraffur: hart = Kreuz, verdichtet = Strich
         ctx.strokeStyle = 'rgba(20,10,0,.6)'; ctx.lineWidth = 1; ctx.beginPath();
@@ -37,7 +41,7 @@ export function drawMap(ctx, lake, sim, jobs = []) {
         if (lake.hard[i] > 1) { ctx.moveTo(x * CELL, y * CELL); ctx.lineTo((x + 1) * CELL, (y + 1) * CELL); }
         ctx.stroke();
       }
-      if (lake.debris[i]) { ctx.fillStyle = '#f2f2f2'; ctx.fillRect(x * CELL + 7, y * CELL + 7, 6, 6); }
+      if (lake.debris[i]) { ctx.fillStyle = '#f2f2f2'; ctx.fillRect(x * CELL + 7, y * CELL + 7, 6, 6); ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.strokeRect(x * CELL + 7.5, y * CELL + 7.5, 5, 5); }
     }
   }
   for (let y = 0; y < rows; y++) { // Abnahme durch die Drohne
@@ -103,7 +107,7 @@ export function drawDroneView(ctx, lake, d) {
   };
   band(() => -1.2, (c) => Math.min(T(c), G(c)), '#5d5b52');
   band((c) => Math.min(T(c), G(c)), G, 'rgba(235,90,60,.5)');
-  band(G, (c) => Math.max(T(c), G(c)), '#7a5f3c');
+  band(G, (c) => Math.max(T(c), G(c)), palOf(lake).layer);
   ctx.fillStyle = '#34312d'; ctx.fillRect(sx(d.x0), sy(0), SLICE.cols * Z, 1.2 * Z); // Felsgrund
   for (let c = 0; c < SLICE.cols; c++) {
     const i = col(c);
@@ -212,10 +216,10 @@ export function drawSlice(ctx, lake, sim) {
   };
   band(() => 0, (c) => Math.min(T(c), G(c)), '#5d5b52'); // fester Untergrund
   band((c) => Math.min(T(c), G(c)), G, 'rgba(235,90,60,.5)'); // Übertiefung: tiefer als die Sollsohle
-  band(G, (c) => Math.max(T(c), G(c)), '#7a5f3c'); // belastete Schicht
+  band(G, (c) => Math.max(T(c), G(c)), palOf(lake).layer); // belastete Schicht
   ctx.beginPath(); ctx.moveTo(0, yOf(T(0)));
   trace(T);
-  ctx.lineTo(W, yOf(T(SLICE.cols - 1))); ctx.strokeStyle = '#a58760'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.lineTo(W, yOf(T(SLICE.cols - 1))); ctx.strokeStyle = palOf(lake).edge; ctx.lineWidth = 3; ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, yOf(G(0))); // Sollsohle
   trace(G);
   ctx.lineTo(W, yOf(G(SLICE.cols - 1)));

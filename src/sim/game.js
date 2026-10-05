@@ -1,4 +1,4 @@
-import { CONFIG, UPGRADES, FOSSILS } from '../config.js';
+import { CONFIG, UPGRADES, FOSSILS, levelById } from '../config.js';
 import { Lake } from './lake.js';
 import { DredgeSim } from './dredge.js';
 import { DroneSim } from './drone.js';
@@ -14,13 +14,16 @@ const freshDay = () => ({ removed: 0, pay: 0, fines: 0, repairs: 0, overCost: 0,
 // Gesamtzustand des Spiels (Management-Ebene), läuft in Echtzeit. Kein DOM, kein Canvas.
 // Gewonnen hat, wer am Ende am meisten Geld hat: das Endergebnis ist `end.finalMoney`.
 export class Game {
-  constructor(seed = Date.now() & 0xffffff) {
+  constructor(seed = Date.now() & 0xffffff, levelId = 'uetikon') {
     this.seed = seed;
+    this.levelId = levelById(levelId).id;
     this.rng = createRng(seed);
-    this.lake = Lake.generate(this.rng);
+    const L = levelById(this.levelId);
+    this.lake = Lake.generate(this.rng, { ...CONFIG.lake, ...L.lake });
+    this.lake.theme = { id: L.id, palette: L.palette, debrisNames: L.debrisNames, fossilNames: L.fossilNames };
     this.time = 0; // Spielzeit in Sekunden
     this.day = 1;
-    this.money = CONFIG.startMoney;
+    this.money = L.startMoney ?? CONFIG.startMoney;
     this.levels = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
     this.stock = { normal: 0, toxic: 0 }; // Rohschlamm im Puffer vor der Anlage (m³)
     this.batch = { vol: 0, toxic: 0, idle: 0 }; // Charge, die gerade in der Anlage zusammenkommt
@@ -49,7 +52,10 @@ export class Game {
   get stats() { return computeStats(this.levels); }
   get stockTotal() { return this.stock.normal + this.stock.toxic; }
   get bufferRoom() { return Math.max(0, this.stats.bufferCapacity - this.stockTotal); }
-  get totalSeconds() { return CONFIG.deadlineDays * CONFIG.daySeconds; }
+  get level() { return levelById(this.levelId); }
+  get deadlineDays() { return this.level.deadlineDays ?? CONFIG.deadlineDays; }
+  get perM3() { return Math.round(CONFIG.pay.perM3 * (this.level.payMult ?? 1)); }
+  get totalSeconds() { return this.deadlineDays * CONFIG.daySeconds; }
   get timeLeft() { return Math.max(0, this.totalSeconds - this.time); }
 
   notify(text, kind = 'info') { this.notes.push({ text, kind }); }
@@ -86,6 +92,7 @@ export class Game {
     sim.cutDepth = this.cutDepth;
     sim.pumpSpeed = this.pumpSpeed;
     sim.bufferRoom = this.bufferRoom;
+    sim.turbidityMult = this.level.turbidityMult ?? 1;
     return sim;
   }
 
@@ -94,7 +101,7 @@ export class Game {
     if (this.status !== 'playing') return;
     const toxic = d.toxicRemoved, overCost = d.overdug * CONFIG.layer.overdigCostPerM3;
     const layer = Math.max(0, d.removed - d.overdug); // nur belastetes Material wird vergütet
-    const pay = ((layer - toxic) + toxic * CONFIG.pay.toxicMultiplier) * CONFIG.pay.perM3;
+    const pay = ((layer - toxic) + toxic * CONFIG.pay.toxicMultiplier) * CONFIG.pay.perM3 * (this.level.payMult ?? 1);
     this.money += pay;
     this.stock.normal += d.removed - toxic; // zu viel abgetragener Boden muss auch entsorgt werden
     this.stock.toxic += toxic;
@@ -112,7 +119,7 @@ export class Game {
     while (a.hard >= C.hardThreshold) { a.hard -= C.hardThreshold; this.addClaim('hard', `Mehraufwand harte Schicht (${C.hardThreshold} m³ Hartnäckiges)`, C.hardThreshold * C.hardPerM3); }
     while (a.toxic >= C.toxicThreshold) { a.toxic -= C.toxicThreshold; this.addClaim('toxic', 'Fassfund: Sonderbehandlung und Papierkram', C.toxicFair); }
     for (const idx of d.fossilsLost ?? []) {
-      const name = FOSSILS[idx - 1], fine = CONFIG.fossils.destroyFine;
+      const name = (this.lake.theme?.fossilNames ?? FOSSILS)[idx - 1], fine = CONFIG.fossils.destroyFine;
       this.money -= fine; t.fossilsLost++; t.fossilFines += fine;
       const msg = `${name} ${pick(XT.lost, this.rng)} (−${fine} CHF)`;
       this.say(msg, 'bad'); this.notify(msg, 'bad');
@@ -243,7 +250,7 @@ export class Game {
 
   // ---------- Fossilienfunde ----------
   addFind(idx) {
-    const F = CONFIG.fossils, name = FOSSILS[idx - 1];
+    const F = CONFIG.fossils, name = (this.lake.theme?.fossilNames ?? FOSSILS)[idx - 1];
     const fee = Math.round(this.rng.range(F.recoverFee[0], F.recoverFee[1]) / 50) * 50;
     const value = Math.round(this.rng.range(F.value[0], F.value[1]) / 100) * 100;
     const f = { id: ++this.extraSeq, name, fee, value, status: 'found', sellAt: 0 };
@@ -383,7 +390,7 @@ export class Game {
 
   _newDay() {
     this.day++;
-    if (this.day > CONFIG.deadlineDays) return this._finish('deadline');
+    if (this.day > this.deadlineDays) return this._finish('deadline');
     const y = this.today;
     if (y.removed > 0.5 || y.fines > 0 || y.overCost > 0) {
       const extra = [];

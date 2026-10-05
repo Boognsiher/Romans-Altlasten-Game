@@ -252,3 +252,34 @@ export const FOSSILS = [
 export const DEBRIS = [
   'Einkaufswagen', 'Velo', 'Gartenzwerg', 'Bürostuhl', 'Fischerhut von 1987', 'Stossstange', 'Kinderwagen (leer, hoffentlich)',
 ];
+
+// ---------- Levels ----------
+// Jedes Level ändert Seegrund (lake: Überschreibungen für Blobs, harte Stellen, Fremdstoffe, Funde, Relief), Farben, Namen
+// (debrisNames/fossilNames, gleiche Reihenfolge und Länge wie DEBRIS/FOSSILS, damit die Schwierigkeit passt) und ein paar Zahlen.
+// Freigeschaltet wird ein Level, wenn das vorherige mit positivem Endstand abgeschlossen ist.
+export const LEVELS = [
+  {
+    id: 'uetikon', name: 'Uetikon: Chemiefabrik-Areal', short: 'Uetikon',
+    blurb: 'Der Klassiker: braune Altlasten, ein paar Fässer, ein Bürostuhl. Zum Warmwerden.',
+    lake: {}, payMult: 1, startMoney: 40000, deadlineDays: 150, turbidityMult: 1,
+    palette: { layer: '#7a5f3c', edge: '#a58760', map: [120, 95, 60], particle: '#b99a6c' },
+    debrisNames: DEBRIS, fossilNames: FOSSILS,
+  },
+  {
+    id: 'horgen', name: 'Horgen: Papierfabrik', short: 'Horgen',
+    blurb: 'Weisser Faserbrei so weit das Auge reicht: grosse Fläche, flach, kaum Fässer, dafür viel Büro-Inventar und milchige Trübung.',
+    lake: { blobs: 34, toxicBlobs: 2, hardBlobs: 5, debrisCount: 40, fossilCount: 5, relief: 0.45 }, payMult: 0.85, startMoney: 45000, deadlineDays: 150, turbidityMult: 1.5,
+    palette: { layer: '#e7e4da', edge: '#ffffff', map: [236, 233, 223], particle: '#f4f2ea' },
+    debrisNames: ['Papierrolle', 'Palette', 'Aktenordner', 'Bürostuhl (Chefetage)', 'Stempelkissen', 'Förderbandstück', 'Papiermaschinen-Walze (schwer)'],
+    fossilNames: ['Gutenberg-Fälschung', 'Wasserzeichen-Stempel', 'Jugendstil-Fabrikglocke', 'Bleisatz-Kasten', 'Gründungsurkunde 1873', 'Dampfmaschinen-Zahnrad', 'Pausenglocke (oder ein Topf)'],
+  },
+  {
+    id: 'richterswil', name: 'Richterswil: Landzunge Horn', short: 'Horn',
+    blurb: 'Steiles Ufer, harte Moräne und Pfahlbau-Funde: wer hier zu tief saugt, zerstört Weltkulturerbe. Dafür zahlt der Kanton besser.',
+    lake: { blobs: 16, toxicBlobs: 5, hardBlobs: 18, debrisCount: 24, fossilCount: 20, relief: 1.6 }, payMult: 1.2, startMoney: 40000, deadlineDays: 150, turbidityMult: 0.9,
+    palette: { layer: '#5f6b4a', edge: '#8fa066', map: [95, 108, 70], particle: '#9aa874' },
+    debrisNames: ['Bootsanker', 'Fischernetz', 'Gummiente (gross)', 'Ruderboot-Wrack', 'Sonnenhut', 'Steg-Bohle', 'Pfahl der Pfahlbauer (bitte stehen lassen)'],
+    fossilNames: ['Pfahlbau-Pfosten', 'Bronzenadel', 'Pfeilspitze', 'Tonscherbe', 'Hirschgeweih-Hacke', 'Einbaum-Fragment', 'Bronze-Beil (oder ein Schlüssel)'],
+  },
+];
+export const levelById = (id) => LEVELS.find((l) => l.id === id) ?? LEVELS[0];

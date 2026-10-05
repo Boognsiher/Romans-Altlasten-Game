@@ -99,7 +99,7 @@ export class DredgeSim {
       const use = s.power * dt > 0 ? clamp(r.removed / (s.power * dt), 0, 1) : 0;
       if (this.slice.suctioning && use > 0) {
         const boost = (this.slice.moving ? 1.4 : 1) * (r.toxicRemoved > 0 ? 1.5 : 1);
-        this.turbidity += (s.power / CONFIG.turbidityGain) * boost * (1 - s.curtain) * use * dt;
+        this.turbidity += (s.power / CONFIG.turbidityGain) * (this.turbidityMult ?? 1) * boost * (1 - s.curtain) * use * dt;
       }
     }
 

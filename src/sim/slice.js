@@ -48,10 +48,12 @@ export class SliceSim {
   set h(v) { this._h = v; this.setH = v; }
 
   // Freispülen: Marker pendelt von 0 nach 1 und zurück; ein Versuch trifft, wenn er in der Zone liegt
+  _debrisNames() { return this.lake.theme?.debrisNames ?? DEBRIS; }
+
   // idx = Index in DEBRIS (0-basiert): jeder Fremdstoff hat eigene Zonenbreite, Trefferzahl und Tempo
   _startFreeing(idx) {
     const U = CONFIG.unclog, info = CONFIG.debrisInfo[idx] ?? {};
-    const f = { pos: 0, dir: 1, speed: info.speed ?? U.speed, zone: info.zone ?? U.zone, hits: 0, need: info.hits ?? U.hits, item: DEBRIS[idx] ?? null };
+    const f = { pos: 0, dir: 1, speed: info.speed ?? U.speed, zone: info.zone ?? U.zone, hits: 0, need: info.hits ?? U.hits, item: this._debrisNames()[idx] ?? null };
     this.freeing = f;
     f.zoneC = this._zone(f);
   }
@@ -273,7 +275,7 @@ export class SliceSim {
       this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : (CONFIG.debrisInfo[d - 1]?.clog ?? CONFIG.debris.clogSeconds);
       if (!a.on) this._startFreeing(d - 1); // von Hand: Minispiel
       this.suctioning = false;
-      this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`, { item: DEBRIS[d - 1] });
+      this.say('clog', `Pumpe verstopft: ${this._debrisNames()[d - 1]}!`, { item: this._debrisNames()[d - 1] });
       return ZERO;
     }
     const res = this.lake.suckProfile(this.row, m.x, m.h, s.radius, s.power * dt); // nur die gewählte Zeile

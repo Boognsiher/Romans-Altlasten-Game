@@ -4,7 +4,7 @@ import { createRng } from '../src/sim/rng.js';
 import { Lake } from '../src/sim/lake.js';
 import { Game } from '../src/sim/game.js';
 import { DredgeSim } from '../src/sim/dredge.js';
-import { CONFIG, DEBRIS } from '../src/config.js';
+import { CONFIG, DEBRIS, FOSSILS } from '../src/config.js';
 import { computeStats, upgradeCost } from '../src/sim/stats.js';
 import { Chain } from '../src/ui/chain.js';
 import { acceptChance, decide, claimedAmount, clampMarkup } from '../src/sim/claims.js';
@@ -1134,7 +1134,7 @@ test('Spielstand: speichern und laden ergibt denselben Zustand und dieselbe Zufa
   g.addClaim('debris', 'Test', 800);
   g.rng();
   const text = serializeGame(g);
-  assert.deepEqual(savedSummary(text), { day: 9, money: 12345, status: 'playing' });
+  assert.deepEqual(savedSummary(text), { day: 9, money: 12345, status: 'playing', level: 'Uetikon' });
   const h = restoreGame(text);
   assert.equal(h.money, 12345); assert.equal(h.day, 9); assert.equal(h.levels.pump, 2);
   assert.equal(h.claims.length, 1); assert.equal(h.claims[0].text, 'Test');
@@ -1292,4 +1292,33 @@ test('Zertifikat: ab 90 % abgenommener Zellen, Prämie steigt mit der Qualität,
   g.update(2 * CONFIG.daySeconds); assert.equal(cb.status, 'submitted');
   g.update(1.1 * CONFIG.daySeconds); assert.equal(cb.status, 'approved');
   assert.equal(g.totals.certPaid, cb.premium);
+});
+
+import { LEVELS, levelById } from '../src/config.js';
+
+test('Levels: Uetikon bleibt unverändert, andere Levels haben eigenen See, Farben, Namen und Zahlen', () => {
+  assert.equal(LEVELS[0].id, 'uetikon');
+  const a = new Game(11), b = new Game(11, 'uetikon');
+  assert.deepEqual([...a.lake.mass], [...b.lake.mass]); // gleicher Seed, gleiches Level = gleicher See
+  const h = new Game(11, 'horgen'), r = new Game(11, 'richterswil');
+  const count = (l, k) => l[k].reduce((n, v) => n + (v ? 1 : 0), 0);
+  assert.ok(count(h.lake, 'debris') > count(a.lake, 'debris'), 'Horgen: mehr Fremdstoffe');
+  assert.ok(count(r.lake, 'hard') > count(a.lake, 'hard'), 'Horn: mehr harte Stellen');
+  assert.ok(count(r.lake, 'fossil') > count(a.lake, 'fossil'), 'Horn: mehr Funde');
+  const range = (l) => { const t = [...l.lake.top], m = t.reduce((a, b) => a + b, 0) / t.length; return Math.sqrt(t.reduce((a, v) => a + (v - m) ** 2, 0) / t.length); }; // Streuung der Höhen
+  assert.ok(range(h) < range(a) && range(a) < range(r), 'Relief: Horgen flach, Horn steil');
+  assert.equal(h.lake.theme.palette.layer, LEVELS[1].palette.layer); // weiss
+  assert.equal(h.deadlineDays, 150); assert.equal(h.money, 45000);
+  assert.ok(h.perM3 < a.perM3 && r.perM3 > a.perM3);
+  assert.equal(levelById('gibtsnicht').id, 'uetikon');
+  for (const l of LEVELS) { assert.equal(l.debrisNames.length, DEBRIS.length); assert.equal(l.fossilNames.length, FOSSILS.length); }
+  // Auszahlung folgt dem Level
+  const m0 = h.money; h.collect({ removed: 10, toxicRemoved: 0, overdug: 0, fines: 0, repairs: 0, tips: 0, clogs: 0 });
+  assert.ok(Math.abs(h.money - m0 - 10 * 0.85 * CONFIG.pay.perM3) < 1e-6);
+  // Speichern merkt sich das Level
+  assert.equal(restoreGame(serializeGame(r)).levelId, 'richterswil');
+  assert.equal(restoreGame(serializeGame(r)).lake.theme.palette.layer, LEVELS[2].palette.layer);
+  // Fremdstoff-Name aus dem Level
+  const sim = r.createSession(); r.lake.setFlat(5); sim.anchor(); sim.slice._startFreeing(0);
+  assert.equal(sim.slice.freeing.item, 'Bootsanker');
 });

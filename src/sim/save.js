@@ -1,4 +1,5 @@
 import { Game } from './game.js';
+import { levelById } from '../config.js';
 import { Lake } from './lake.js';
 
 // Spielstand: reine Umwandlung Game <-> JSON-Text (kein DOM, kein Speicher). Gespeichert wird der Management-Zustand
@@ -31,7 +32,7 @@ export function restoreGame(text) {
   try {
     const s = JSON.parse(text);
     if (s?.version !== SAVE_VERSION) return null;
-    const game = new Game(s.data.seed);
+    const game = new Game(s.data.seed, s.data.levelId);
     Object.assign(game, s.data);
     game.notes = [];
     const lake = new Lake(s.lake.cols, s.lake.rows);
@@ -44,5 +45,5 @@ export function restoreGame(text) {
 }
 
 export const savedSummary = (text) => {
-  try { const d = JSON.parse(text); return d.version === SAVE_VERSION ? { day: d.data.day, money: d.data.money, status: d.data.status } : null; } catch { return null; }
+  try { const d = JSON.parse(text); return d.version === SAVE_VERSION ? { day: d.data.day, money: d.data.money, status: d.data.status, level: levelById(d.data.levelId).short } : null; } catch { return null; }
 };

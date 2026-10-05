@@ -1,4 +1,4 @@
-import { CONFIG, UPGRADES } from './config.js';
+import { LEVELS, levelById, CONFIG, UPGRADES } from './config.js';
 import { Game } from './sim/game.js';
 import { classProbabilities } from './sim/plant.js';
 import { acceptChance, claimedAmount } from './sim/claims.js';
@@ -20,8 +20,12 @@ const pct = (v) => `${Math.round(v * 100)}%`;
 
 // Rekord (bestes Endergebnis) im Browser merken; funktioniert auch ohne Speicher
 const BEST_KEY = 'altlasten.best';
-const loadBest = () => { try { const v = localStorage.getItem(BEST_KEY); return v === null ? null : Number(v); } catch { return null; } };
-const saveBest = (v) => { try { localStorage.setItem(BEST_KEY, String(v)); } catch { /* egal */ } };
+// Pro Level das beste Endergebnis ({ id: CHF }); der alte Einzelrekord zählt für Uetikon
+const LEVELS_KEY = 'altlasten.levels';
+const loadLevels = () => { try { const o = JSON.parse(localStorage.getItem(LEVELS_KEY) ?? '{}'); if (o.uetikon === undefined) { const v = localStorage.getItem(BEST_KEY); if (v !== null) o.uetikon = Number(v); } return o; } catch { return {}; } };
+const loadBest = (id = game.levelId) => loadLevels()[id] ?? null;
+const saveBest = (v, id = game.levelId) => { try { localStorage.setItem(LEVELS_KEY, JSON.stringify({ ...loadLevels(), [id]: v })); } catch { /* egal */ } };
+const levelUnlocked = (i) => i === 0 || (loadLevels()[LEVELS[i - 1].id] ?? 0) > 0; // vorheriges Level mit Gewinn abgeschlossen
 
 // Spielstand: automatisch bei jedem neuen Tag, alle 20 s, beim Pausieren und beim Verlassen der Seite
 const SAVE_KEY = 'altlasten.save';
@@ -284,11 +288,11 @@ function updateLog() {
 
 function updateHud() {
   const left = game.timeLeft, mm = Math.floor(left / 60), ss = String(Math.floor(left % 60)).padStart(2, '0');
-  $('h-day').textContent = `${Math.min(game.day, CONFIG.deadlineDays)}/${CONFIG.deadlineDays}`;
+  $('h-day').textContent = `${Math.min(game.day, game.deadlineDays)}/${game.deadlineDays}`;
   $('h-left').textContent = `(${mm}:${ss})`;
   $('h-money').textContent = chf(game.money);
   $('h-money').style.color = game.money < 0 ? 'var(--bad)' : '';
-  $('h-income').textContent = `(${CONFIG.pay.perM3} CHF/m³)`;
+  $('h-income').textContent = `(${game.perM3} CHF/m³)`;
   $('h-clean').textContent = `${(game.lake.cleanFraction() * 100).toFixed(1)}%`;
   $('h-acc').textContent = `${(game.lake.acceptedFraction() * 100).toFixed(0)}%`;
   const best = loadBest();
@@ -466,7 +470,9 @@ function showEnd() {
   clearSave();
   const e = game.end, t = game.totals, best = loadBest();
   const record = e.finalMoney > 0 && (best === null || e.finalMoney > best); // nur positive Endstände zählen als Rekord
+  const hadNext = LEVELS.findIndex((l) => l.id === game.levelId); const wasLocked = hadNext >= 0 && hadNext + 1 < LEVELS.length && !levelUnlocked(hadNext + 1);
   if (record) saveBest(e.finalMoney);
+  const unlockNote = wasLocked && levelUnlocked(hadNext + 1) ? `Neues Level freigeschaltet: ${LEVELS[hadNext + 1].name}!` : '';
   const title = { early: 'See saniert und abgenommen!', deadline: 'Frist abgelaufen', bankrupt: 'Projekt gestoppt' }[e.reason];
   showOverlay(`<h2>${title}</h2>
     <p>Endstand: <b>${chf(e.finalMoney)}</b>${record ? ' <b class="good">Neuer Rekord!</b>' : best !== null ? `<br><small>Rekord: ${chf(best)}</small>` : ''}</p>
@@ -476,16 +482,38 @@ function showEnd() {
     Entsorgung ${chf(t.disposalPaid)} · Bussen ${chf(t.finesPaid)} · Bergungen ${chf(t.repairsPaid)} · Übertiefung ${chf(t.overdigPaid)}</small></p>
     <p>Gewonnen hat, wer am Ende am meisten Geld hat.</p>
     <button class="primary" id="btn-restart">Neues Spiel</button>`);
-  $('btn-restart').onclick = () => restart();
+  $('btn-restart').onclick = () => showLevels(unlockNote);
+}
+
+// Level-Anzeige: Titelzeile, Partikelfarbe
+function applyLevel() {
+  fx.setTheme(game.lake.theme?.palette);
+  $('level-name').textContent = game.level.short;
+  document.title = `Seesanierung · ${game.level.short}`;
+}
+
+// Levelauswahl: freigeschaltet wird ein Level mit Gewinn im vorherigen
+function showLevels(note = '') {
+  const best = loadLevels();
+  const rows = LEVELS.map((l, i) => {
+    const open = levelUnlocked(i), b = best[l.id];
+    return `<button class="level${open ? '' : ' locked'}" data-level="${l.id}" ${open ? '' : 'disabled'}>
+      <span class="swatch" style="background:${l.palette.layer}"></span>
+      <span class="ltxt"><b>${open ? '' : '🔒 '}${l.name}</b><small>${l.blurb}</small>
+      <small>${Math.round(CONFIG.pay.perM3 * l.payMult)} CHF/m³ · ${l.deadlineDays} Tage · Start ${chf(l.startMoney)}${b !== undefined ? ` · Rekord ${chf(b)}` : ''}${open ? '' : ` · schalte es mit einem Gewinn in ${LEVELS[i - 1].short} frei`}</small></span></button>`;
+  }).join('');
+  showOverlay(`<h2>Seesanierung</h2>${note ? `<p class="good">${note}</p>` : ''}<p>Welcher See soll es sein?</p><div class="levels">${rows}</div>`);
+  for (const b of document.querySelectorAll('#overlay .level:not(.locked)')) b.onclick = () => restart(b.dataset.level);
 }
 
 function restart(loaded = null) {
-  game = loaded instanceof Game ? loaded : new Game(); sim = game.createSession(); drone = null; paused = false; endShown = false;
+  game = loaded instanceof Game ? loaded : new Game(undefined, typeof loaded === 'string' ? loaded : game.levelId); sim = game.createSession(); drone = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
   setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null; certSig = null;
   hideOverlay(); syncMode(); updatePanel();
-  if (!loaded || loaded instanceof Event) clearSave(); else saveGame();
+  applyLevel();
+  if (!(loaded instanceof Game)) { clearSave(); toast(game.level.blurb, 'info'); } else saveGame();
 }
 
 $('btn-drone').onclick = startDrone;
@@ -633,12 +661,13 @@ function frame(now) {
 }
 
 const saved = (() => { const t = readSave(); const m = t && savedSummary(t); return m && m.status === 'playing' ? m : null; })();
+applyLevel();
 buildUpgrades();
 buildRows();
 syncMode();
 updatePanel();
 function showIntro() {
-  showOverlay(`<h2>Seesanierung Uetikon</h2>
+  showOverlay(`<h2>Seesanierung</h2>
     <p>Das Spiel läuft in <b>Echtzeit</b>: Für jeden abgesaugten m³ der belasteten Schicht gibt es ${CONFIG.pay.perM3} CHF (Altlasten ${Math.round(CONFIG.pay.perM3 * CONFIG.pay.toxicMultiplier)} CHF), zu tief abgetragener Boden wird nicht bezahlt. Entsorgung, Analyse, Bussen und Reparaturen kosten. Zusatzleistungen (Fremdstoffe, harte Schicht, Fässer) rechnest du als <b>Nachträge</b> beim Bauherrn ab: je höher die Forderung, desto unwahrscheinlicher die Genehmigung. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
     was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
     <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
@@ -652,7 +681,7 @@ function showIntro() {
       <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
       Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> fährst du aus dem verankerten Ponton aus (V oder Knopf): Sie taucht nur im Kasten unter dem Ponton, sieht nur im Lichtkegel in Fahrtrichtung (leicht nach unten) und scannt den Boden, wenn du langsam und nah daran fährst. Sie nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
     <button class="primary" id="btn-go">Los</button>`);
-  $('btn-go').onclick = () => { if (saved) clearSave(); hideOverlay(); };
+  $('btn-go').onclick = () => showLevels();
   if (saved) {
     const b = document.createElement('button');
     b.className = 'primary'; b.id = 'btn-continue';
@@ -668,7 +697,7 @@ function showIntro() {
 const UNLOCK_KEY = 'altlasten.unlocked';
 const unlocked = () => { try { return localStorage.getItem(UNLOCK_KEY) === CONFIG.passwordHash; } catch { return false; } };
 function showGate() {
-  showOverlay(`<h2>Seesanierung Uetikon</h2>
+  showOverlay(`<h2>Seesanierung</h2>
     <p>Bitte das Passwort eingeben.</p>
     <form id="gate-form"><input id="gate-pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Passwort" style="width:100%;padding:12px;font-size:18px;border-radius:8px;border:1px solid #ffffff44;background:#0e1a24;color:inherit">
     <p id="gate-err" class="warn" style="min-height:1.4em;margin:6px 0"></p>

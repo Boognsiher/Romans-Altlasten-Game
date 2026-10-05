@@ -53,7 +53,7 @@ export class Lake {
     // Unebener Seegrund: Hügel und Mulden
     lake.top.fill(4);
     for (let i = 0; i < 14; i++) {
-      const a = rng.range(-1.8, 2.2);
+      const a = rng.range(-1.8, 2.2) * (cfg.relief ?? 1);
       each(rng.range(0, lake.cols), rng.range(0, lake.rows), rng.range(4, 9), (k, d) => { lake.top[k] += a * (1 - d * d); });
     }
     for (let k = 0; k < lake.top.length; k++) {
@@ -61,16 +61,16 @@ export class Lake {
       lake.target[k] = lake.top[k] - lake.mass[k];
     }
     // Harte Schichten und Fremdstoffe liegen in der belasteten Schicht
-    for (let i = 0; i < CONFIG.hard.blobs; i++) {
+    for (let i = 0; i < (cfg.hardBlobs ?? CONFIG.hard.blobs); i++) {
       each(rng.range(0, lake.cols), rng.range(0, lake.rows), rng.range(2.5, 5), (k, d) => {
         if (lake.mass[k] > 0) lake.hard[k] = Math.max(lake.hard[k], d < 0.5 ? 2 : 1);
       });
     }
-    for (let n = 0, tries = 0; n < CONFIG.debris.count && tries < 1000; tries++) {
+    for (let n = 0, tries = 0; n < (cfg.debrisCount ?? CONFIG.debris.count) && tries < 1000; tries++) {
       const k = lake.idx(rng.int(0, lake.cols - 1), rng.int(0, lake.rows - 1));
       if (lake.mass[k] > 0 && !lake.debris[k]) { lake.debris[k] = rng.int(1, DEBRIS.length); n++; }
     }
-    for (let n = 0, tries = 0; n < CONFIG.fossils.count && tries < 2000; tries++) {
+    for (let n = 0, tries = 0; n < (cfg.fossilCount ?? CONFIG.fossils.count) && tries < 2000; tries++) {
       const k = lake.idx(rng.int(0, lake.cols - 1), rng.int(0, lake.rows - 1));
       const inLayer = rng() < 0.6; // ein Teil liegt unter der bestellten Fläche (gefährdet), der Rest daneben (sicher)
       if (lake.fossil[k] || (inLayer ? !lake.initial[k] : lake.initial[k])) continue;
