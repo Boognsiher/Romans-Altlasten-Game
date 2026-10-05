@@ -383,6 +383,7 @@ function syncMode() {
   if (size !== shownSize) { size === 'slice' ? sizeSlice(canvas) : sizeMap(canvas, game.lake); shownSize = size; }
   $('shift-hud').hidden = false;
   $('shift-actions').hidden = false;
+  $('row-box').hidden = mode !== 'slice';
   $('btn-anchor').hidden = mode !== 'map'; $('btn-leave').hidden = mode !== 'slice';
   $('btn-drone2').hidden = mode !== 'slice'; $('btn-pump').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone';
   $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne' }[mode];

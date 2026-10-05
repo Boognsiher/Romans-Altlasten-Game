@@ -21,9 +21,9 @@ export function sizeSlice(canvas) { setLogical(canvas, SLICE.cols * U, SLICE_TOP
 
 // Farben der belasteten Schicht je Level (Uetikon braun, Horgen weiss, Horn grün)
 // Schriftgrösse: das Bild wird auf kleinen Bildschirmen stark verkleinert (view.s = CSS-Pixel je logischem Pixel).
-// px(n) liefert die logische Grösse, die auf dem Bildschirm mindestens `min` Pixel ergibt.
+// fs(n) liefert die logische Grösse, die auf dem Bildschirm mindestens `min` Pixel ergibt.
 export const view = { s: 1 };
-export const px = (n, min = 12) => Math.round(Math.max(n, min / Math.max(0.2, view.s)));
+export const fs = (n, min = 12) => Math.round(Math.max(n, min / Math.max(0.2, view.s)));
 const PAL = { layer: '#7a5f3c', edge: '#a58760', map: [120, 95, 60] };
 const palOf = (lake) => ({ ...PAL, ...(lake.theme?.palette ?? {}) });
 
@@ -66,7 +66,7 @@ export function drawMap(ctx, lake, sim, jobs = []) {
     const z = j.zone, active = j.status === 'active';
     ctx.strokeStyle = active ? '#7fe3ff' : '#ffd24d'; ctx.lineWidth = 2; ctx.setLineDash(active ? [] : [8, 5]);
     ctx.strokeRect(z.x * CELL + 1, z.y * CELL + 1, z.w * CELL - 2, z.h * CELL - 2); ctx.setLineDash([]);
-    ctx.fillStyle = active ? '#7fe3ff' : '#ffd24d'; ctx.font = `bold ${px(13)}px system-ui, sans-serif`;
+    ctx.fillStyle = active ? '#7fe3ff' : '#ffd24d'; ctx.font = `bold ${fs(13)}px system-ui, sans-serif`;
     ctx.fillText(`${active ? 'Auftrag' : 'Angebot'}: ${j.place}`, z.x * CELL + 6, z.y * CELL + 16);
   }
   if (!sim) return;
@@ -158,7 +158,7 @@ export function drawDroneView(ctx, lake, d) {
   ctx.drawImage(darkness, 0, 0);
   for (const m of marks) { // Scanergebnisse bleiben sichtbar, auch ausserhalb des Lichts
     ctx.strokeStyle = m.dirty ? '#ff5d4d' : '#5ae682'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(m.x - Z / 2 + 2, m.y); ctx.lineTo(m.x + Z / 2 - 2, m.y); ctx.stroke();
-    ctx.fillStyle = m.dirty ? '#ff9a8d' : '#8af0ab'; ctx.font = `bold ${px(12)}px system-ui, sans-serif`; ctx.textAlign = 'center';
+    ctx.fillStyle = m.dirty ? '#ff9a8d' : '#8af0ab'; ctx.font = `bold ${fs(12)}px system-ui, sans-serif`; ctx.textAlign = 'center';
     ctx.fillText(m.dirty ? `Rest ${Math.round(m.rest * 100)} cm` : 'sauber', m.x, m.y - 8 - (m.c % 2) * 14); // abwechselnd versetzt, damit Nachbarn nicht überlappen
   }
   ctx.textAlign = 'start';
@@ -172,11 +172,11 @@ export function drawDroneView(ctx, lake, d) {
   ctx.fillStyle = '#fff6c9'; ctx.beginPath(); ctx.arc(14, 2, 4, 0, Math.PI * 2); ctx.fill(); // Lampe vorne
   ctx.restore();
   if (!d.scanned.some(Boolean)) {
-    ctx.fillStyle = '#ffffffcc'; ctx.font = `${px(14)}px system-ui, sans-serif`; ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffffcc'; ctx.font = `${fs(14)}px system-ui, sans-serif`; ctx.textAlign = 'center';
     ctx.fillText('Langsam und nah am Boden fahren: Nur was im Lichtkegel liegt, wird gescannt', cx, H - 14);
     ctx.textAlign = 'start';
   }
-  if (d.speed > CONFIG.drone.beam.maxScanSpeed) { ctx.fillStyle = '#ff7a6b'; ctx.font = `bold ${px(16)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('Zu schnell zum Scannen', cx, cy + 46); ctx.textAlign = 'start'; }
+  if (d.speed > CONFIG.drone.beam.maxScanSpeed) { ctx.fillStyle = '#ff7a6b'; ctx.font = `bold ${fs(16)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('Zu schnell zum Scannen', cx, cy + 46); ctx.textAlign = 'start'; }
 }
 
 // ---------- Instanz 2: Querschnitt ----------
@@ -241,13 +241,13 @@ export function drawSlice(ctx, lake, sim) {
   };
   edge((c) => G(c) - CONFIG.layer.tolerance, '#ffae4d');
   edge((c) => G(c) + CONFIG.drone.acceptMax, '#7bd88f');
-  ctx.font = `${px(11)}px system-ui, sans-serif`; ctx.textAlign = 'right';
-  ctx.fillStyle = '#ffc98a'; ctx.fillText(`Toleranz −${Math.round(CONFIG.layer.tolerance * 100)} cm: tiefer = zu tief`, W - 8, yOf(G(SLICE.cols - 1) - CONFIG.layer.tolerance) + px(14));
-  ctx.fillStyle = '#a8e8b6'; ctx.fillText(`+${Math.round(CONFIG.drone.acceptMax * 100)} cm: darunter gilt als sauber`, W - 8, yOf(G(SLICE.cols - 1) + CONFIG.drone.acceptMax) - px(6, 4));
+  ctx.font = `${fs(11)}px system-ui, sans-serif`; ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffc98a'; ctx.fillText(`Toleranz −${Math.round(CONFIG.layer.tolerance * 100)} cm: tiefer = zu tief`, W - 8, yOf(G(SLICE.cols - 1) - CONFIG.layer.tolerance) + fs(14));
+  ctx.fillStyle = '#a8e8b6'; ctx.fillText(`+${Math.round(CONFIG.drone.acceptMax * 100)} cm: darunter gilt als sauber`, W - 8, yOf(G(SLICE.cols - 1) + CONFIG.drone.acceptMax) - fs(6, 4));
   ctx.textAlign = 'start';
   // Markierungen je Spalte in der gewählten Zeile: Restschicht (rot, ▼) und zu tief (orange, ▲). Die anderen Zeilen zeigt die Zeilenwahl.
-  const MK = px(11, 10) / 11; // Grösse der Markierungen
-  ctx.font = `bold ${px(11, 10)}px system-ui, sans-serif`; ctx.textAlign = 'center';
+  const MK = fs(11, 10) / 11; // Grösse der Markierungen
+  ctx.font = `bold ${fs(11, 10)}px system-ui, sans-serif`; ctx.textAlign = 'center';
   for (let c = 0; c < SLICE.cols; c++) {
     let rest = 0, restShown = false, deep = 0, deepShown = false;
     [sl.row].forEach((r, k) => { // nur die gewählte Zeile; die anderen zeigt die Zeilenwahl
@@ -285,7 +285,7 @@ export function drawSlice(ctx, lake, sim) {
     ctx.beginPath();
     for (let c = 0; c < SLICE.cols; c++) (c ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c), yOf(sl.targetAt(c)));
     ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.setLineDash([10, 5]); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#7fe3ff'; ctx.font = `${px(13)}px system-ui, sans-serif`;
+    ctx.fillStyle = '#7fe3ff'; ctx.font = `${fs(13)}px system-ui, sans-serif`;
     ctx.fillText(`Echolot: Ziel −${sl.cutDepth.toFixed(2)} m (punktiert = Messung)`, 12, SLICE_TOP + 18);
   }
   // Entdeckte Fossilien im Untergrund (Ammonit-Spirale)
@@ -359,35 +359,35 @@ export function drawSlice(ctx, lake, sim) {
     ctx.beginPath(); ctx.moveTo(mouth.x - 12, mouth.y + 4); ctx.lineTo(mouth.x - 30, mouth.y + 28); ctx.lineTo(mouth.x + 40, mouth.y + 28); ctx.lineTo(mouth.x + 12, mouth.y + 4); ctx.fill();
   }
   if (sl.tipped > 0 || sl.tilt > 0.05) {
-    ctx.fillStyle = sl.tipped > 0 || sl.tilt > 0.6 ? '#ff7a6b' : '#ffd24d'; ctx.font = `bold ${px(16)}px system-ui, sans-serif`;
+    ctx.fillStyle = sl.tipped > 0 || sl.tilt > 0.6 ? '#ff7a6b' : '#ffd24d'; ctx.font = `bold ${fs(16)}px system-ui, sans-serif`;
     ctx.fillText(sl.tipped > 0 ? 'UMGEKIPPT!' : 'Schieflage', Math.max(8, pump.x - 40), Math.max(96, bodyTop - 8));
   }
   if (sl.freeing && sl.clog > 0) { // Freispül-Minispiel: im grünen Bereich auslösen (Grösse folgt der Schrift, damit es auf kleinen Bildschirmen lesbar bleibt)
-    const f = sl.freeing, K = px(13) / 13, bw = Math.min(W - 24, 260 * K), bx = Math.min(W - bw / 2 - 12, Math.max(bw / 2 + 12, pump.x)) - bw / 2, by = Math.max(SLICE_TOP + 70 * K, bodyTop - 70 * K), zw = f.zone * bw;
+    const f = sl.freeing, K = fs(13) / 13, bw = Math.min(W - 24, 260 * K), bx = Math.min(W - bw / 2 - 12, Math.max(bw / 2 + 12, pump.x)) - bw / 2, by = Math.max(SLICE_TOP + 70 * K, bodyTop - 70 * K), zw = f.zone * bw;
     ctx.fillStyle = '#000b'; ctx.fillRect(bx - 8, by - 12 * K, bw + 16, 66 * K);
     ctx.fillStyle = '#33414c'; ctx.fillRect(bx, by + 16 * K, bw, 14 * K);
     ctx.fillStyle = '#7bd88f'; ctx.fillRect(bx + f.zoneC * bw - zw / 2, by + 16 * K, zw, 14 * K);
     ctx.fillStyle = '#fff'; ctx.fillRect(bx + f.pos * bw - 2 * K, by + 10 * K, 4 * K, 26 * K);
-    ctx.fillStyle = '#fff'; ctx.font = `bold ${px(13)}px system-ui, sans-serif`; ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${fs(13)}px system-ui, sans-serif`; ctx.textAlign = 'center';
     ctx.fillText(`${f.item ?? 'Freispülen'}! ${'●'.repeat(f.hits)}${'○'.repeat(f.need - f.hits)}  ${sl.clog.toFixed(1)}s`, bx + bw / 2, by + 8 * K);
-    ctx.fillStyle = '#ffffffbb'; ctx.font = `${px(11)}px system-ui, sans-serif`; ctx.fillText('im grünen Bereich: Leertaste / Knopf', bx + bw / 2, by + 48 * K); ctx.textAlign = 'start';
+    ctx.fillStyle = '#ffffffbb'; ctx.font = `${fs(11)}px system-ui, sans-serif`; ctx.fillText('im grünen Bereich: Leertaste / Knopf', bx + bw / 2, by + 48 * K); ctx.textAlign = 'start';
   }
   if (sl.clog > 0 && !sl.freeing) {
-    ctx.fillStyle = '#ff7a6b'; ctx.font = `bold ${px(18)}px system-ui, sans-serif`;
+    ctx.fillStyle = '#ff7a6b'; ctx.font = `bold ${fs(18)}px system-ui, sans-serif`;
     ctx.fillText(`VERSTOPFT ${sl.clog.toFixed(1)}s`, Math.max(8, pump.x - 60), Math.max(116, bodyTop - 28));
   }
   if (sl.auto.on) {
-    ctx.fillStyle = sl.auto.error ? '#ff7a6b' : '#7bd88f'; ctx.font = `bold ${px(16)}px system-ui, sans-serif`;
+    ctx.fillStyle = sl.auto.error ? '#ff7a6b' : '#7bd88f'; ctx.font = `bold ${fs(16)}px system-ui, sans-serif`;
     ctx.fillText(sl.auto.error ? 'AUTOMATIK STÖRUNG (R)' : 'AUTOMATIK', W - 230, SLICE_TOP - 8);
   }
-  ctx.fillStyle = sim.pumpOn ? '#7bd88f' : '#ffffff88'; ctx.font = `bold ${px(14)}px system-ui, sans-serif`; ctx.textAlign = 'right'; // Pumpenschalter
-  ctx.fillText(sim.pumpOn ? 'PUMPE AN' : 'PUMPE AUS', W - 12, SLICE_TOP + px(18, 16)); ctx.textAlign = 'start';
+  ctx.fillStyle = sim.pumpOn ? '#7bd88f' : '#ffffff88'; ctx.font = `bold ${fs(14)}px system-ui, sans-serif`; ctx.textAlign = 'right'; // Pumpenschalter
+  ctx.fillText(sim.pumpOn ? 'PUMPE AN' : 'PUMPE AUS', W - 12, SLICE_TOP + fs(18, 16)); ctx.textAlign = 'start';
   // Arbeitsrichtung: nur nach rechts (und nach unten) wird gesaugt
   ctx.fillStyle = sl.suctioning ? '#7fe3ff' : '#ffffff66';
   ctx.beginPath(); ctx.moveTo(mouth.x + 20, mouth.y - 10); ctx.lineTo(mouth.x + 36, mouth.y - 3); ctx.lineTo(mouth.x + 20, mouth.y + 4); ctx.fill();
-  ctx.fillStyle = '#ffffff55'; ctx.font = `${px(14)}px system-ui, sans-serif`;
+  ctx.fillStyle = '#ffffff55'; ctx.font = `${fs(14)}px system-ui, sans-serif`;
   ctx.fillText('Rückwärts saugt nicht', 12, SLICE_TOP - 8);
-  ctx.fillStyle = '#ffffffcc'; ctx.font = `bold ${px(13)}px system-ui, sans-serif`; ctx.fillText(`Zeile ${sl.ci + 1} / ${sl.rows.length}`, 12, SLICE_TOP + px(18, 16));
+  ctx.fillStyle = '#ffffffcc'; ctx.font = `bold ${fs(13)}px system-ui, sans-serif`; ctx.fillText(`Zeile ${sl.ci + 1} / ${sl.rows.length}`, 12, SLICE_TOP + fs(18, 16));
   turbidityVeil(ctx, sim, W, H);
 }
 

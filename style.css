@@ -235,3 +235,4 @@ button.level.locked { opacity: .5; }
   #shift-actions button { font-size: 13px; }
   #spd-box, #cut-box { font-size: 13px; }
 }
+#row-box[hidden] { display: none; }

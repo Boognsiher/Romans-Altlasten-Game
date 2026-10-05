@@ -1339,3 +1339,25 @@ test('Automatik startet dort, wo sie eingeschaltet wird: links davon bleibt alle
   for (const r of sl.rows) { for (let c = 0; c < 6; c++) assert.equal(row(r, c), 1, 'links unberührt'); for (let c = 9; c < 16; c++) assert.ok(row(r, c) < CONFIG.drone.acceptMax, `rechts fertig (Zeile ${r}, Spalte ${c})`); }
   assert.equal(R, CONFIG.box.rows);
 });
+
+import { drawMap, drawSlice, drawDroneView, view } from '../src/ui/render.js';
+
+// Zeichentest mit Attrappe: fängt Programmierfehler beim Zeichnen ab (z. B. verdeckte Namen), die sonst die ganze Spielschleife anhalten
+const mockCtx = () => new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'createLinearGradient' || k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : k === 'measureText' ? () => ({ width: 10 }) : () => {})), set: (t, k, v) => { t[k] = v; return true; } });
+
+globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => mockCtx() }) };
+
+test('Zeichnen: Karte (mit Auftrag), Querschnitt (mit Verstopfung, Zertifikat-Spiel) und Drohne laufen ohne Fehler, auch bei kleiner Anzeige', () => {
+  for (const levelId of ['uetikon', 'horgen', 'richterswil']) for (const scale of [1.2, 0.35]) {
+    view.s = scale;
+    const g = new Game(5, levelId), sim = g.createSession();
+    g.jobs.push({ id: 1, status: 'offer', place: 'Seeuferweg', zone: { x: 20, y: 15, w: 8, h: 5 }, bonus: 1000, offerExpiresAt: 1e9, dueAt: 1e9, progress: 0 });
+    drawMap(mockCtx(), g.lake, sim, g.jobs);
+    sim.x = 24; sim.y = 10.5; sim.anchor();
+    const sl = sim.slice; sl.clog = 5; sl._startFreeing(5); sl.sound?.();
+    drawSlice(mockCtx(), g.lake, sim);
+    const d = g.startDrone({ x0: sl.x0, row: sl.row, r0: sl.r0 });
+    drawDroneView(mockCtx(), g.lake, d);
+  }
+  view.s = 1;
+});
