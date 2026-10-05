@@ -292,6 +292,7 @@ function updateHud() {
   $('h-left').textContent = `(${mm}:${ss})`;
   $('h-money').textContent = chf(game.money);
   $('h-money').style.color = game.money < 0 ? 'var(--bad)' : '';
+  { const cap = game.stats.bufferCapacity, st = game.stockTotal; $('h-buf').textContent = `${Math.round(st)}/${Math.round(cap)} m³`; $('h-buf').classList.toggle('warn', st >= cap * 0.85); }
   $('h-income').textContent = `(${game.perM3} CHF/m³)`;
   $('h-clean').textContent = `${(game.lake.cleanFraction() * 100).toFixed(1)}%`;
   $('h-acc').textContent = `${(game.lake.acceptedFraction() * 100).toFixed(0)}%`;
@@ -345,7 +346,7 @@ function fitCanvas() {
     if (el === canvas || el.hidden) continue;
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.position !== 'static') continue; // schwebende Elemente zählen nicht
-    below += el.offsetHeight + (el.id === 'touch-ui' ? 0 : parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); // touch-ui hat margin-top:auto (Restplatz), der zählt nicht
+    below += (el.id === 'shift-actions' ? el.scrollHeight : el.offsetHeight) + (el.id === 'touch-ui' ? 0 : parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); // touch-ui hat margin-top:auto (Restplatz), der zählt nicht
   }
   const docTop = canvas.getBoundingClientRect().top + scrollY;
   const availH = Math.max(narrow() ? 60 : 220, innerHeight - docTop - below - (narrow() ? 64 : 16));
@@ -394,7 +395,7 @@ function syncMode() {
 function anchor() { if (!drone && sim.anchor()) syncMode(); }
 function leave() { if (!drone && sim.leave()) syncMode(); }
 function toggleAuto() { if (!drone) sim.toggleAuto(); }
-function toggleSound() { audio.setMuted(!audio.muted); $('btn-sound').textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
+function toggleSound() { audio.setMuted(!audio.muted); for (const id of ['btn-sound', 'btn-sound2']) $(id).textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
 // Zeilenwahl: der Kasten hat mehrere Zeilen, jede wird einzeln gefahren
 const rowChips = [];
 function buildRows() {
@@ -528,8 +529,8 @@ $('btn-drone').onclick = startDrone;
 $('btn-drone2').onclick = startDrone;
 $('btn-recall').onclick = recall;
 $('btn-pump').onclick = togglePump;
-$('btn-sound').onclick = toggleSound;
-$('btn-sound').textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)';
+$('btn-sound').onclick = toggleSound; $('btn-sound2').onclick = toggleSound;
+for (const id of ['btn-sound', 'btn-sound2']) $(id).textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)';
 $('btn-pause').onclick = togglePause;
 addEventListener('resize', () => { fitCanvas(); placeToast(); });
 addEventListener('orientationchange', () => setTimeout(fitCanvas, 200));

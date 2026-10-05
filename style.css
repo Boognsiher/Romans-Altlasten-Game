@@ -236,3 +236,13 @@ button.level.locked { opacity: .5; }
   #spd-box, #cut-box { font-size: 13px; }
 }
 #row-box[hidden] { display: none; }
+
+/* Hochformat: doppelte Knöpfe entfallen (die Pumpe schaltet der grosse Knopf, Ton steht im Panel); die Knopfzeilen scrollen notfalls,
+   statt die Pfeile unten aus dem Bild zu drängen */
+@media (max-width: 860px) and (orientation: portrait) {
+  body.touch #btn-pump, body.touch #btn-sound { display: none; }
+  #shift-actions { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+  #touch-ui { flex: none; }
+}
+#h-buf.warn { color: var(--bad); }
+button#btn-sound2 { width: 100%; margin-top: 6px; }
