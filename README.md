@@ -126,3 +126,8 @@ Nach dem Ankerwerfen ist der Pumpenschlauch verdreht: 3 Knoten (`CONFIG.hose`). 
 
 - Im Hochformat füllt das Bild immer die ganze Breite (kein schwarzer Rand mehr neben dem Bild). Ist oben und unten zu wenig Platz, wird das Bild beschnitten und der Ausschnitt folgt Pumpe, Haken oder Schlauch senkrecht; ist Platz übrig, wird der Querschnitt gezoomt und folgt der Pumpe seitlich.
 - Meldungen sind selten und kurz: nur Warnungen und Ergebnisse (eine auf einmal, 2 Sekunden); alles andere steht im Journal. Geld-Änderungen erscheinen kurz als +/- statt der Einkommensangabe in der Kopfzeile; die grünen +Zahlen an der Pumpe bleiben.
+
+## Automatik prüft den Schlauch, Drohnen-Autopilot
+
+- **Schlauch:** Die Automatik prüft den Schlauch mit (`CONFIG.hose.byAuto`): Stufe 1 (experimentell) übersieht einen Knoten, ab Stufe 2 prüft sie alles selbst und das Minispiel entfällt ("Automatik hat den Schlauch geprüft").
+- **Drohne:** Ist die Tauchdrohne voll ausgebaut (Stufe 4), gibt es einen Autopilot: im Flug mit T oder dem Knopf an- und ausschaltbar; auf dem Querschnitt stellt der Knopf "Drohne: von Hand / Autopilot" ein, wie der nächste Flug startet. Der Autopilot fährt den Kasten langsam nach rechts und zurück ab, folgt dem Boden und beendet den Flug, sobald alle Spalten gescannt sind. Jede Eingabe von Hand übernimmt das Steuer. Die Vergütung und das Zertifikat sind dieselben wie bei Handflug.

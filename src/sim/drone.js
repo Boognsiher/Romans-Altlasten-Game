@@ -28,6 +28,8 @@ export class DroneSim {
     this.found = []; // neu entdeckte Fossilien (Indizes)
     this.docCells = 0; // neu dokumentierte Zellen (Befliegungsdaten)
     this.over = false;
+    this.autopilot = false; // Autopilot (voll ausgebaute Drohne): fliegt den Kasten selbst ab
+    this.apDir = 1;
   }
 
   get range() { return this.stats.droneRadius * 2; } // Leuchtweite in Einheiten
@@ -46,8 +48,21 @@ export class DroneSim {
   }
 
   // input: { dx, dy } in -1..1 (dy > 0 = nach unten); beide Achsen gleichzeitig
+  // Autopilot: langsam nach rechts, dann nach links zurück, bis alle Spalten gescannt sind; Höhe folgt dem Boden ein Stück voraus
+  _autoInput() {
+    const col = Math.floor(this.x - this.x0), open = (from, to) => { for (let c = Math.max(0, from); c <= Math.min(SLICE.cols - 1, to); c++) if (!this.scanned[c]) return true; return false; };
+    if (this.apDir > 0 && !open(col, SLICE.cols - 1)) this.apDir = -1;
+    else if (this.apDir < 0 && !open(0, col)) this.apDir = 1;
+    const target = Math.max(this.surfaceAt(this.x), this.surfaceAt(this.x + this.apDir * 1.5)) + CONFIG.drone.beam.clearance + 0.45;
+    return { dx: this.apDir * 0.3, dy: clamp((this.h - target) * 2, -1, 1) };
+  }
+
   update(dt, input) {
     if (this.over) return;
+    if (this.autopilot) {
+      if (Math.abs(input?.dx || 0) > 0.2 || Math.abs(input?.dy || 0) > 0.2) this.autopilot = false; // Spieler übernimmt
+      else input = this._autoInput();
+    }
     const B = CONFIG.drone.beam;
     let ix = input.dx || 0, iy = input.dy || 0;
     const len = Math.hypot(ix, iy);
@@ -75,6 +90,7 @@ export class DroneSim {
       if (this.progress[c] >= 1) this._scanColumn(c);
     }
     this.timeLeft -= dt;
+    if (this.autopilot && this.scanned.every(Boolean)) this.over = true; // alles gescannt
     if (this.timeLeft <= 0) { this.timeLeft = 0; this.over = true; }
   }
 

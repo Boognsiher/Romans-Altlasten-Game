@@ -40,6 +40,7 @@ export class Game {
     this.certSeq = 0;
     this.craneOffer = null; // Kran-Auftrag: { id, name, segments, payPer, expiresAt } oder null
     this.craneSeq = 0;
+    this.droneAutoPref = false; // Drohne startet im Autopilot (nur voll ausgebaute Drohne)
     this.craneNextAt = CONFIG.crane.firstOfferDay * CONFIG.daySeconds;
     this.finds = []; // Fossilienfunde: { id, name, fee, value, status: 'found' | 'recovering', sellAt }
     this.jobs = []; // Zusatzaufträge der Gemeinde: { id, status: 'offer' | 'active', place, zone, bonus, offerExpiresAt, dueAt, progress }
@@ -188,7 +189,13 @@ export class Game {
   }
 
   // Drohne ausbringen: taucht im Kasten unter dem Ponton (win = Querschnittsfenster des verankerten Pontons)
-  startDrone(win) { return new DroneSim(this.lake, this.stats, win); }
+  get droneMaxed() { return this.levels.drone >= UPGRADES.drone.maxLevel; }
+
+  startDrone(win) {
+    const d = new DroneSim(this.lake, this.stats, win);
+    if (this.droneMaxed && this.droneAutoPref) d.autopilot = true;
+    return d;
+  }
 
   // Drohnenflug abrechnen: Pauschale für den Einsatz, Befliegungsdaten werden an die Behörde verkauft, Funde gemeldet
   // Gesamtbewertung eines Kastens (16 Spalten x box.rows ab Zeile r0): Anteil abgenommener Zellen, Übertiefung, Qualität 0..1

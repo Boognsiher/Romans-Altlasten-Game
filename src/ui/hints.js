@@ -5,7 +5,7 @@ export const HINTS = {
     slice: [['A D', 'Pumpe seitlich'], ['W S', 'Kette hoch/runter'], ['Leertaste', 'Pumpe an/aus'], ['1–5 / Tab', 'Zeile wählen'], ['Z X', 'Tempo'], ['T', 'Automatik'], ['R', 'Automatik-Reset'], ['V', 'Drohne ausbringen'], ['Q', 'zurück zur Karte'], ['P', 'Pause']],
     hose: [['Klick / Tipp', 'Knoten aufdrehen'], ['Leertaste', 'nächsten Knoten aufdrehen']],
     crane: [['A D', 'Laufkatze'], ['W S', 'Haken hoch/runter'], ['Leertaste', 'greifen / loslassen'], ['Q', 'abbrechen']],
-    drone: [['WASD / Pfeile', 'Drohne steuern'], ['Q', 'einholen'], ['langsam + nah am Boden', 'scannt den Boden im Lichtkegel'], ['P', 'Pause']],
+    drone: [['WASD / Pfeile', 'Drohne steuern'], ['Q', 'einholen'], ['T', 'Autopilot (voll ausgebaut)'], ['langsam + nah am Boden', 'scannt den Boden im Lichtkegel'], ['P', 'Pause']],
   },
   touch: {
     map: [['Stick', 'Ponton fahren'], ['Tipp auf die Karte', 'hinfahren und ankern'], ['Knopf', 'Anker werfen']],

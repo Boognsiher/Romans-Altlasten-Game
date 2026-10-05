@@ -1513,3 +1513,30 @@ test('Schlauch entwirren: sehr schnelles Spielen endet schnell, ohne Strafe', ()
   for (let i = 0; i < 100 && !h.over; i++) h.update(0.05);
   assert.ok(h.over && !h.auto && h.time < 4);
 });
+
+test('Drohnen-Autopilot: fliegt den Kasten selbst ab, scannt alle Spalten, Spieler kann übernehmen; nur voll ausgebaut als Voreinstellung', () => {
+  const g = new Game(110); g.lake.setFlat(1, 3);
+  g.levels.drone = 4; g.levels.docs = 0;
+  assert.equal(g.droneMaxed, true);
+  g.droneAutoPref = true;
+  const d = g.startDrone({ x0: 8, row: 10 });
+  assert.equal(d.autopilot, true);
+  // sauberen Kasten vorbereiten
+  for (const y of [8, 9, 10, 11, 12]) for (let x = 8; x < 24; x++) { const i = g.lake.idx(x, y); g.lake.top[i] = g.lake.target[i]; g.lake.mass[i] = 0; }
+  for (let t = 0; t < 200 && !d.over; t += 0.05) d.update(0.05, {});
+  assert.ok(d.scanned.every(Boolean), 'alle Spalten gescannt');
+  assert.ok(d.over && d.timeLeft > 0, 'vor Ende des Akkus fertig');
+  assert.equal(d.newlyFlagged, 0);
+  const res = g.finishDrone(d); assert.ok(res.cert, 'Zertifikat für den sauberen Kasten');
+  // Übernehmen
+  const d2 = g.startDrone({ x0: 8, row: 10 }); d2.update(0.05, { dx: 1, dy: 0 });
+  assert.equal(d2.autopilot, false);
+  // nicht voll ausgebaut: keine Voreinstellung
+  const g2 = new Game(111); g2.droneAutoPref = true; g2.levels.drone = 2;
+  assert.equal(g2.startDrone({ x0: 8, row: 10 }).autopilot, false);
+});
+
+test('Schlauch: Automatik-Stufe bestimmt die Knoten (Stufe 1 übersieht einen, ab Stufe 2 keiner)', () => {
+  assert.deepEqual(CONFIG.hose.byAuto.slice(0, 4), [3, 1, 0, 0]);
+  assert.equal(CONFIG.hose.byAuto[0], CONFIG.hose.twists);
+});

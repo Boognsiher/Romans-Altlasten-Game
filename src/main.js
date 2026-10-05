@@ -451,11 +451,26 @@ function syncMode() {
 }
 function anchor() {
   if (busy() || !sim.anchor()) return;
-  hose = new HoseSim(game.rng); // erst den Schlauch entwirren, dann darf abgesaugt werden
+  // erst den Schlauch entwirren, dann darf abgesaugt werden; die Automatik prüft ihn mit (Stufe 1 übersieht einen Knoten, ab Stufe 2 alles)
+  const n = CONFIG.hose.byAuto[game.stats.autoLevel] ?? CONFIG.hose.twists;
+  if (n > 0) hose = new HoseSim(game.rng, { twists: n });
   syncMode();
-  toast('Tippe auf die Knoten', 'info', true);
+  if (n <= 0) toast('Automatik hat den Schlauch geprüft', 'good', true);
+  else toast(n < CONFIG.hose.twists ? 'Automatik hat einen Knoten übersehen' : 'Tippe auf die Knoten', 'info', true);
 }
 function hoseAction() { if (hose) hose.next(); }
+
+// Drohnen-Automatik (nur voll ausgebaute Drohne): im Flug ein-/ausschalten, auf dem Querschnitt als Voreinstellung für den nächsten Flug
+function toggleDroneAuto() {
+  if (!game.droneMaxed) return;
+  if (drone) { drone.autopilot = !drone.autopilot; toast(drone.autopilot ? 'Autopilot an' : 'Du fliegst selbst', 'info', true); }
+  else if (sim.mode === 'slice' && !busy()) game.droneAutoPref = !game.droneAutoPref;
+}
+function updateDroneAutoBtn() {
+  const b = $('btn-drone-auto'), show = game.droneMaxed && (drone || (sim.mode === 'slice' && !busy()));
+  b.hidden = !show;
+  if (show) b.textContent = drone ? `🤖 Autopilot ${drone.autopilot ? 'aus' : 'an'} (T)` : `🤖 Drohne: ${game.droneAutoPref ? 'Autopilot' : 'von Hand'}`;
+}
 function leave() { if (!busy() && sim.leave()) syncMode(); }
 function toggleAuto() { if (!busy()) sim.toggleAuto(); }
 function toggleSound() { audio.setMuted(!audio.muted); for (const id of ['btn-sound', 'btn-sound2']) $(id).textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
@@ -556,6 +571,7 @@ function startDrone() {
   if (sim.mode !== 'slice' || busy()) return;
   drone = game.startDrone({ x0: sim.slice.x0, row: sim.slice.row, r0: sim.slice.r0 });
   syncMode();
+  if (drone.autopilot) toast('Drohne fliegt im Autopilot', 'info', true);
 }
 function recall() { if (drone) { drone.timeLeft = 0; drone.over = true; } else if (crane) crane.over = true; }
 
@@ -663,6 +679,7 @@ canvas.addEventListener('pointerdown', (e) => { // Maus: Klick auf den Knoten (T
 });
 $('btn-drone').onclick = startDrone;
 $('btn-drone2').onclick = startDrone;
+$('btn-drone-auto').onclick = toggleDroneAuto;
 $('btn-recall').onclick = recall;
 $('btn-pump').onclick = togglePump;
 $('chk-bruno').checked = advisor.enabled;
@@ -707,10 +724,11 @@ function frame(now) {
     if (game.day !== savedDay || saveClock > 10) saveGame();
     if (drone) {
       if (readInput.tap('Escape', 'KeyQ')) recall();
+      if (readInput.tap('KeyT')) toggleDroneAuto();
       // Die Drohne bleibt in der Bildmitte: Maus/Finger steuern relativ zur Mitte, Tasten und Stick in beide Achsen
       drone.update(dt, readInput.read({ x: canvas.logicalW / 2, y: canvas.logicalH / 2 }, { holdToMove: true, soft: true }));
       const done = drone.scanned.reduce((a, v) => a + v, 0);
-      $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${done}/16 Spalten gescannt · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
+      $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${done}/16 Spalten gescannt · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz${drone.autopilot ? ' · Autopilot' : ''}`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
       if (drone.over) endDrone();
     } else if (hose) {
@@ -809,6 +827,7 @@ function frame(now) {
   }
   readInput.endFrame();
 
+  updateDroneAutoBtn();
   trackMoney(dt);
   stateSigTimer += dt;
   if (stateSigTimer > 0.5) {
