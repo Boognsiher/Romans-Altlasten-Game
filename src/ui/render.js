@@ -472,6 +472,6 @@ export function drawHoseView(ctx, h) {
     if (k.state !== 'twisted') continue;
     const p = HoseSim.point(k.t);
     ctx.strokeStyle = `rgba(255,122,107,${0.5 + 0.5 * pulse})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 20 * K, (40 + pulse * 6) * K, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.font = `bold ${fs(13)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('tippen', p.x, p.y - (74 + pulse * 6) * K); ctx.textAlign = 'start';
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${fs(13)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('tippen', p.x, p.y + (52 + pulse * 6) * K); ctx.textAlign = 'start';
   }
 }

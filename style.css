@@ -266,3 +266,12 @@ button#btn-sound2 { width: 100%; margin-top: 6px; }
 @media (max-width: 860px) { .bruno-bubble p { font-size: 15px; } }
 
 #touch-ui #act { margin-left: auto; }
+
+/* Geld-Änderung kurz in der Kopfzeile (ersetzt die Einkommensangabe) */
+#h-income.delta { font-weight: 800; font-size: 1.05em; }
+#h-income.delta.plus { color: var(--good); }
+#h-income.delta.minus { color: var(--bad); }
+/* Meldung: klein, ein Chip, nie über 2 Zeilen */
+#toast span { font-size: 14px !important; padding: 5px 12px !important; }
+body.touch #btn-pause2 { opacity: .8; }
+canvas { transition: none; }

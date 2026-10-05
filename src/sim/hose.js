@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 // Minispiel Schlauch entwirren (nach dem Ankerwerfen, vor dem Absaugen): Der Pumpenschlauch hat ein paar Knoten, jeder wird mit
 // einem Tipp (Klick, Leertaste oder grosser Knopf) aufgedreht. Keine Strafe, kein Scheitern: nach spätestens `maxSeconds` entwirrt
 // sich der Rest von selbst, das Spielprinzip dauert also nie länger. Reine Logik, kein DOM. Koordinaten = Bildkoordinaten des Querschnitts.
-export const HOSE = { W: 768, shoreX: 40, shoreY: 150, pontonX: 728, pontonY: 330, openSeconds: 0.7, hitR: 46 };
+export const HOSE = { W: 768, shoreX: 40, shoreY: 250, pontonX: 728, pontonY: 390, openSeconds: 0.7, hitR: 46 };
 
 export class HoseSim {
   constructor(rng, { twists = CONFIG.hose.twists, maxSeconds = CONFIG.hose.maxSeconds } = {}) {

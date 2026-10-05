@@ -121,3 +121,8 @@ Speichern bei Änderungen: Kauf, Rückbau, Nachträge, Zertifikate, Funde, Auftr
 ## Minispiel: Schlauch entwirren
 
 Nach dem Ankerwerfen ist der Pumpenschlauch verdreht: 3 Knoten (`CONFIG.hose`). Ein Tipp oder Klick auf einen Knoten (oder Leertaste / grosser Knopf für den nächsten) dreht ihn auf; sind alle frei, darf abgesaugt werden. Es gibt keine Strafe und kein Scheitern; spätestens nach 20 Sekunden entwirrt sich der Rest von selbst, das Minispiel dauert also nie länger (`src/sim/hose.js`). Die Toleranzlinien im Querschnitt haben jetzt eine kleine Legende im Felsband (statt grosser Beschriftung im Bild).
+
+## Bildgrösse am Handy und Meldungen
+
+- Im Hochformat füllt das Bild immer die ganze Breite (kein schwarzer Rand mehr neben dem Bild). Ist oben und unten zu wenig Platz, wird das Bild beschnitten und der Ausschnitt folgt Pumpe, Haken oder Schlauch senkrecht; ist Platz übrig, wird der Querschnitt gezoomt und folgt der Pumpe seitlich.
+- Meldungen sind selten und kurz: nur Warnungen und Ergebnisse (eine auf einmal, 2 Sekunden); alles andere steht im Journal. Geld-Änderungen erscheinen kurz als +/- statt der Einkommensangabe in der Kopfzeile, nicht mehr als Zahlen im Bild.

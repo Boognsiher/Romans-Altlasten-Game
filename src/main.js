@@ -310,7 +310,7 @@ function updateHud() {
   $('h-money').textContent = chf(game.money);
   $('h-money').style.color = game.money < 0 ? 'var(--bad)' : '';
   { const cap = game.stats.bufferCapacity, st = game.stockTotal; $('h-buf').textContent = `${Math.round(st)}/${Math.round(cap)} m³`; $('h-buf').classList.toggle('warn', st >= cap * 0.85); }
-  $('h-income').textContent = `(${game.perM3} CHF/m³)`;
+  if (performance.now() > deltaUntil) { $('h-income').textContent = `(${game.perM3} CHF/m³)`; $('h-income').className = ''; }
   $('h-clean').textContent = `${(game.lake.cleanFraction() * 100).toFixed(1)}%`;
   $('h-acc').textContent = `${(game.lake.acceptedFraction() * 100).toFixed(0)}%`;
   const best = loadBest();
@@ -328,32 +328,66 @@ let toastTimer = 0;
 // Meldungen unten im Bild: oben liegen Statuszeile und Pumpe, dort würden sie verdeckt
 function placeToast() {
   const t = $('toast');
-  t.style.right = '8px'; t.style.top = `${Math.max(8, canvas.offsetTop + canvas.clientHeight - t.offsetHeight - 12)}px`;
+  const visTop = canvas.offsetTop + (cropVis !== null ? panY : 0), visH = cropVis !== null ? cropVis : canvas.clientHeight;
+  t.style.right = '8px'; t.style.top = `${Math.max(8, visTop + visH - t.offsetHeight - 12)}px`;
 }
-function toast(text, kind = 'info') {
+// Meldungen nur noch für Wichtiges (Warnungen, Ergebnisse) und kurz, eine auf einmal. Alles andere steht im Journal; Geld zeigt die Kopfzeile (+/-).
+function toast(text, kind = 'info', force = false) {
+  if (!force && (kind === 'info' || kind === 'good' || kind === 'upgrade')) return;
   $('toast').innerHTML = `<span class="${kind}"></span>`;
   $('toast').firstChild.textContent = text;
   placeToast();
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { $('toast').innerHTML = ''; }, 4500);
+  toastTimer = setTimeout(() => { $('toast').innerHTML = ''; }, force ? 3800 : 2200);
+}
+
+// Geld-Änderungen als kleines +/- in der Kopfzeile (statt Meldungen und schwebenden Zahlen im Bild)
+let lastMoney = null, moneyTimer = 0, deltaUntil = 0;
+function flashDelta(d) {
+  const el = $('h-income');
+  el.textContent = `${d > 0 ? '+' : '−'}${Math.abs(Math.round(d)).toLocaleString('de-CH')}`;
+  el.className = `delta ${d > 0 ? 'plus' : 'minus'}`;
+  deltaUntil = performance.now() + 1500;
+}
+function trackMoney(dt) {
+  moneyTimer += dt;
+  if (moneyTimer < 0.7) return;
+  moneyTimer = 0;
+  if (lastMoney !== null && Math.abs(game.money - lastMoney) >= 5) flashDelta(game.money - lastMoney);
+  lastMoney = game.money;
 }
 
 // ---------- Spielfeld einpassen und Steuerungsanzeige ----------
 // Das Spielfeld füllt die verfügbare Fläche (Breite der Spalte, Höhe des Fensters abzüglich allem, was darunter im Fluss steht)
 // und wird in passender Auflösung gerendert.
-let zoom = 1, panX = 0;
+let zoom = 1, panX = 0, panY = 0, cropVis = null;
 const MAX_ZOOM = 1.7;
-// Bei Zoom folgt der sichtbare Ausschnitt weich der Pumpe
+// Handy hochkant: das Bild füllt immer die ganze Breite. Platz übrig: Zoom (nur Querschnitt, folgt der Pumpe seitlich).
+// Platz knapp: oben und unten wird beschnitten, der Ausschnitt folgt dem Geschehen (Pumpe, Haken) senkrecht.
 let layoutSig = '';
+function focusY(lh, h) { // senkrechter Mittelpunkt des Geschehens in Bildschirmpixeln der Zeichenfläche
+  if (hose) return 0.45 * h;
+  if (crane) return (sliceY(crane.hookH) / lh) * h;
+  if (drone) return 0.5 * h;
+  if (sim.mode === 'slice') return (sliceHeadScreen(sim.slice).y / lh) * h;
+  return 0.5 * h;
+}
 function panCanvas(dt) {
-  const sig = `${$('shift-actions').offsetHeight}/${$('touch-ui').offsetHeight}/${innerHeight}`; // Knöpfe erscheinen/verschwinden: Zoom neu rechnen
+  const sig = `${$('shift-actions').offsetHeight}/${$('touch-ui').offsetHeight}/${innerHeight}`; // Knöpfe erscheinen/verschwinden: neu rechnen
   if (sig !== layoutSig) { layoutSig = sig; fitCanvas(); }
-  if (zoom <= 1) return;
-  const stageW = $('stage').clientWidth, cw = canvas.getBoundingClientRect().width;
-  const sl = sim.slice, fx = ((sl.x - sl.x0) / 16) * cw; // 16 = Spalten des Querschnitts
-  const want = Math.min(Math.max(0, fx - stageW / 2), Math.max(0, cw - stageW));
-  panX += (want - panX) * Math.min(1, dt * 6);
-  canvas.style.marginLeft = `${-panX}px`;
+  const stageW = $('stage').clientWidth, cw = parseFloat(canvas.style.width) || stageW, ch = parseFloat(canvas.style.height) || 0;
+  if (zoom > 1 && sim.mode === 'slice' && !busy()) {
+    const sl = sim.slice, fxp = ((sl.x - sl.x0) / 16) * cw; // 16 = Spalten des Querschnitts
+    const want = Math.min(Math.max(0, fxp - stageW / 2), Math.max(0, cw - stageW));
+    panX += (want - panX) * Math.min(1, dt * 6);
+    canvas.style.marginLeft = `${-panX}px`;
+  } else canvas.style.marginLeft = '';
+  if (cropVis !== null && ch > cropVis) {
+    const want = Math.min(Math.max(0, focusY(canvas.logicalH, ch) - cropVis / 2), ch - cropVis);
+    panY += (want - panY) * Math.min(1, dt * 6);
+    const bottom = ch - cropVis - panY;
+    canvas.style.marginTop = `${-panY}px`; canvas.style.marginBottom = `${-bottom}px`; canvas.style.clipPath = `inset(${panY}px 0 ${bottom}px 0)`;
+  } else { panY = 0; canvas.style.marginTop = canvas.style.marginBottom = canvas.style.clipPath = ''; }
 }
 function fitCanvas() {
   const lw = canvas.logicalW, lh = canvas.logicalH, stage = $('stage');
@@ -365,23 +399,27 @@ function fitCanvas() {
     if (cs.display === 'none' || cs.position !== 'static') continue; // schwebende Elemente zählen nicht
     below += (el.id === 'shift-actions' ? el.scrollHeight : el.offsetHeight) + (el.id === 'touch-ui' ? 0 : parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); // touch-ui hat margin-top:auto (Restplatz), der zählt nicht
   }
-  const docTop = canvas.getBoundingClientRect().top + scrollY;
-  const availH = Math.max(narrow() ? 60 : 220, innerHeight - docTop - below - (narrow() ? 64 : 16));
-  let { w, h } = fitSize(stage.clientWidth, availH, lw, lh);
-  // Handy hochkant, Querschnitt: der freie Platz geht in einen Zoom; das Bild folgt der Pumpe seitlich (panCanvas)
-  zoom = 1;
-  if (!busy() && sim.mode === 'slice' && narrow() && matchMedia('(orientation: portrait)').matches) {
-    zoom = Math.min(MAX_ZOOM, Math.max(1, (innerHeight - docTop - below - 12) / h));
-    w *= zoom; h *= zoom;
+  const docTop = stage.getBoundingClientRect().top + scrollY; // Oberkante der Bühne (die Zeichenfläche ist ihr erstes Kind)
+  const stageW = stage.clientWidth;
+  const portrait = narrow() && matchMedia('(orientation: portrait)').matches;
+  zoom = 1; cropVis = null;
+  let w, h;
+  if (portrait && (busy() || sim.mode !== 'map')) { // Querschnitt, Drohne, Kran, Schlauch: volle Breite, Rest wird gezoomt oder beschnitten
+    const visAvail = Math.max(60, innerHeight - docTop - below - 12), nat = (stageW * lh) / lw;
+    if (!busy() && sim.mode === 'slice') zoom = Math.min(MAX_ZOOM, Math.max(1, visAvail / nat));
+    w = stageW * zoom; h = w * (lh / lw);
+    if (h > visAvail + 1) cropVis = visAvail;
+  } else {
+    const availH = Math.max(narrow() ? 60 : 220, innerHeight - docTop - below - (narrow() ? 64 : 16));
+    ({ w, h } = fitSize(stageW, availH, lw, lh));
   }
   canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
-  if (zoom === 1) canvas.style.marginLeft = '';
   const q = renderQuality(devicePixelRatio, w, lw);
-  const cw = Math.round(lw * q), ch = Math.round(lh * q);
-  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+  const cw = Math.round(lw * q), chh = Math.round(lh * q);
+  if (canvas.width !== cw || canvas.height !== chh) { canvas.width = cw; canvas.height = chh; }
   canvas.q = cw / lw;
   view.s = w / lw; fx.view = view.s; // Schrift im Bild folgt dem Massstab
-  placeToast();
+  panCanvas(0); placeToast();
 }
 
 function updateHints() {
@@ -415,7 +453,7 @@ function anchor() {
   if (busy() || !sim.anchor()) return;
   hose = new HoseSim(game.rng); // erst den Schlauch entwirren, dann darf abgesaugt werden
   syncMode();
-  toast('Schlauch prüfen: tippe auf die Knoten, um sie aufzudrehen', 'info');
+  toast('Tippe auf die Knoten', 'info', true);
 }
 function hoseAction() { if (hose) hose.next(); }
 function leave() { if (!busy() && sim.leave()) syncMode(); }
@@ -434,7 +472,7 @@ function buildRows() {
 }
 function selectRow(k) {
   if (busy() || sim.mode !== 'slice' || !sim.slice.selectRow(k)) return;
-  fx.clear(); toast(`Zeile ${sim.slice.ci + 1} von ${CONFIG.box.rows}`, 'info');
+  fx.clear();
 }
 function updateRows() {
   if (sim.mode !== 'slice') return;
@@ -484,7 +522,7 @@ function togglePump() {
   if (sim.mode === 'slice' && sim.slice.freeing) { // verstopft: der Knopf löst das Freispül-Minispiel aus
     const r = sim.freeAttempt();
     if (r) { audio.free(r); fx.burst(sliceMouthScreen(sim.slice).x, sliceMouthScreen(sim.slice).y, r === 'cleared' ? 24 : r === 'hit' ? 8 : 4, r === 'miss' ? 'dust' : 'hard', r === 'cleared' ? 220 : 120); }
-    if (r === 'cleared') { fx.shake = 0; toast('Pfropfen gelöst!', 'good'); }
+    if (r === 'cleared') { fx.shake = 0;  }
     return;
   }
   if (sim.togglePump()) audio.toggle(sim.pumpOn);
@@ -527,7 +565,7 @@ function startCrane() {
   const c = game.startCrane();
   if (!c) { toast(`Zu wenig Geld für den Kranführer (${chf(CONFIG.crane.fee)})`, 'bad'); return; }
   crane = c; setSheet(false); syncMode();
-  toast('Kran: Haken über die gelbe Öse, greifen, zum Kahn rechts fahren und sanft absetzen', 'info');
+  toast('Haken über die Öse, greifen, zum Kahn, sanft absetzen', 'info', true);
 }
 function craneAction() {
   if (!crane) return;
@@ -539,7 +577,7 @@ function endCrane() {
   crane = null;
   syncMode();
   const msg = r.delivered + r.broken === 0 ? 'Kran: nichts geliefert, der Auftrag bleibt offen' : `Kran: ${r.delivered}/${r.total} geliefert${r.damaged ? `, ${r.damaged} beschädigt` : ''}${r.broken ? `, ${r.broken} zerbrochen (−${chf(r.fine)})` : ''}. ${r.pay ? `+${chf(r.pay)}` : ''}`;
-  toast(msg, r.broken || !r.delivered ? 'bad' : 'good');
+  toast(msg, r.broken || !r.delivered ? 'bad' : 'good', true);
 }
 function updateCraneOffer() {
   const o = game.craneOffer, box = $('crane-offer');
@@ -559,11 +597,10 @@ function endDrone() {
   const r = game.finishDrone(drone);
   drone = null;
   syncMode();
-  const extra = `${r.found ? `, ${r.found} Fund${r.found > 1 ? 'e' : ''}` : ''}${r.doc ? `, Befliegungsdaten +${chf(r.doc)}` : ''}`;
-  const pc = Math.round(r.box.fraction * 100), need = Math.round(CONFIG.cert.minFraction * 100);
-  if (r.cert) { toast(`Kasten ${pc} % sauber: Zertifikat ${r.cert.serial} (${r.cert.grade})!`, 'good'); showCert(r.cert); return; }
-  const certNote = r.box.n && r.box.fraction >= CONFIG.cert.minFraction ? ' (Kasten schon zertifiziert)' : r.box.n ? ` · Kasten ${pc} % sauber, ${need} % nötig für ein Zertifikat` : '';
-  toast(r.flagged ? `Drohne: ${r.accepted} Zellen abgenommen, ${r.flagged} mit Restschmutz (rot markiert)${extra}${certNote}` : `Drohne: ${r.accepted} Zellen abgenommen, nichts zu beanstanden${extra}${certNote}`, r.flagged ? 'bad' : 'good');
+  const pc = Math.round(r.box.fraction * 100);
+  if (r.cert) { showCert(r.cert); return; }
+  const need = Math.round(CONFIG.cert.minFraction * 100);
+  toast(`Kasten ${pc} % sauber${r.box.fraction >= CONFIG.cert.minFraction ? ' (schon zertifiziert)' : r.box.n ? `, ${need} % nötig` : ''}${r.flagged ? ` · ${r.flagged} Rest` : ''}`, r.flagged ? 'bad' : 'good', true);
 }
 
 // ---------- Spielende ----------
@@ -614,9 +651,9 @@ function restart(loaded = null) {
   sizeMap(canvas, game.lake); shownSize = 'map';
   setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null; certSig = null;
   hideOverlay(); syncMode(); updatePanel();
-  stateSig = null; closeBruno(); advisor = new Advisor(loadMuted()); advisor.enabled = brunoOn();
+  lastMoney = null; stateSig = null; closeBruno(); advisor = new Advisor(loadMuted()); advisor.enabled = brunoOn();
   applyLevel();
-  if (!(loaded instanceof Game)) { clearSave(); toast(game.level.blurb, 'info'); } else saveGame();
+  if (!(loaded instanceof Game)) { clearSave(); toast(game.level.blurb, 'info', true); } else saveGame();
 }
 
 canvas.addEventListener('pointerdown', (e) => { // Maus: Klick auf den Knoten (Touch läuft über onTap)
@@ -681,7 +718,7 @@ function frame(now) {
       hose.update(dt);
       $('s-removed').textContent = `Schlauch: ${hose.free}/${hose.twists.length} Knoten gelöst`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
-      if (hose.over) { const auto = hose.auto; hose = null; syncMode(); toast(auto ? 'Der Schlauch hat sich von selbst entwirrt. Du darfst saugen.' : 'Schlauch frei: Pumpe frei!', 'good'); }
+      if (hose.over) { const auto = hose.auto; hose = null; syncMode(); toast(auto ? 'Schlauch hat sich selbst entwirrt' : 'Schlauch frei', 'good', true); }
     } else if (crane) {
       if (readInput.tap('Escape', 'KeyQ')) recall();
       if (readInput.tap('Space', 'Enter')) craneAction();
@@ -689,7 +726,7 @@ function frame(now) {
       $('s-removed').textContent = `Kran: ${crane.result.delivered}/${crane.segs.length} geliefert · ${Math.ceil(crane.timeLeft)}s${crane.carried ? ' · Last am Haken' : ''}`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
       for (const ev of crane.events.splice(0)) {
-        if (ev.kind === 'deliver') { audio.free('cleared'); toast('Stück geliefert!', 'good'); }
+        if (ev.kind === 'deliver') { audio.free('cleared'); toast('Stück geliefert', 'good', true); }
         else if (ev.kind === 'damage') toast('Hart aufgesetzt: Stück beschädigt', 'bad');
         else if (ev.kind === 'break') { audio.clog(); toast('Stück zerbrochen! (Busse)', 'bad'); }
         else if (ev.kind === 'splash') toast('Platsch: das Stück liegt wieder am Grund', 'info');
@@ -740,7 +777,7 @@ function frame(now) {
       }
       if (sim.mode === 'slice') {
         const m = sliceMouthScreen(sim.slice), load = Math.min(1, d.removed / Math.max(1e-6, sim.stats.power * dt));
-        fx.feed(m, sliceY(sim.slice.surfaceAt(sim.slice.mouth().x)), d, dt, Math.max(0, game.money - before));
+        fx.feed(m, sliceY(sim.slice.surfaceAt(sim.slice.mouth().x)), d, dt, 0);
         audio.hum(sim.pumpOn && sim.slice.suctioning, load);
       }
       if (sim.mode === 'slice') {
@@ -772,6 +809,7 @@ function frame(now) {
   }
   readInput.endFrame();
 
+  trackMoney(dt);
   stateSigTimer += dt;
   if (stateSigTimer > 0.5) {
     stateSigTimer = 0;
@@ -791,7 +829,6 @@ function frame(now) {
   else if (sim.mode === 'slice') {
     const o = fx.offset();
     ctx.save(); ctx.translate(o.x, o.y); drawSlice(ctx, game.lake, sim); fx.draw(ctx); ctx.restore();
-    panCanvas(1 / 60);
   }
   else {
     drawMap(ctx, game.lake, sim, game.jobs);
@@ -802,6 +839,8 @@ function frame(now) {
       ctx.moveTo(mapTarget.x * CELL, mapTarget.y * CELL - 14); ctx.lineTo(mapTarget.x * CELL, mapTarget.y * CELL + 14); ctx.stroke();
     }
   }
+  panCanvas(1 / 60);
+  panCanvas(1 / 60);
   requestAnimationFrame(frame);
 }
 
