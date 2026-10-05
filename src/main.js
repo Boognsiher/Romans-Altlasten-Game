@@ -229,6 +229,20 @@ function toast(text, kind = 'info') {
 // ---------- Spielfeld einpassen und Steuerungsanzeige ----------
 // Das Spielfeld füllt die verfügbare Fläche (Breite der Spalte, Höhe des Fensters abzüglich allem, was darunter im Fluss steht)
 // und wird in passender Auflösung gerendert.
+let zoom = 1, panX = 0;
+const MAX_ZOOM = 1.7;
+// Bei Zoom folgt der sichtbare Ausschnitt weich der Pumpe
+let layoutSig = '';
+function panCanvas(dt) {
+  const sig = `${$('shift-actions').offsetHeight}/${$('touch-ui').offsetHeight}/${innerHeight}`; // Knöpfe erscheinen/verschwinden: Zoom neu rechnen
+  if (sig !== layoutSig) { layoutSig = sig; fitCanvas(); }
+  if (zoom <= 1) return;
+  const stageW = $('stage').clientWidth, cw = canvas.getBoundingClientRect().width;
+  const sl = sim.slice, fx = ((sl.x - sl.x0) / 16) * cw; // 16 = Spalten des Querschnitts
+  const want = Math.min(Math.max(0, fx - stageW / 2), Math.max(0, cw - stageW));
+  panX += (want - panX) * Math.min(1, dt * 6);
+  canvas.style.marginLeft = `${-panX}px`;
+}
 function fitCanvas() {
   const lw = canvas.logicalW, lh = canvas.logicalH, stage = $('stage');
   if (!lw) return;
@@ -237,12 +251,19 @@ function fitCanvas() {
     if (el === canvas || el.hidden) continue;
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.position !== 'static') continue; // schwebende Elemente zählen nicht
-    below += el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+    below += el.offsetHeight + (el.id === 'touch-ui' ? 0 : parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); // touch-ui hat margin-top:auto (Restplatz), der zählt nicht
   }
   const docTop = canvas.getBoundingClientRect().top + scrollY;
   const availH = Math.max(220, innerHeight - docTop - below - (narrow() ? 64 : 16));
-  const { w, h } = fitSize(stage.clientWidth, availH, lw, lh);
+  let { w, h } = fitSize(stage.clientWidth, availH, lw, lh);
+  // Handy hochkant, Querschnitt: der freie Platz geht in einen Zoom; das Bild folgt der Pumpe seitlich (panCanvas)
+  zoom = 1;
+  if (!drone && sim.mode === 'slice' && narrow() && matchMedia('(orientation: portrait)').matches) {
+    zoom = Math.min(MAX_ZOOM, Math.max(1, (innerHeight - docTop - below - 12) / h));
+    w *= zoom; h *= zoom;
+  }
   canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+  if (zoom === 1) canvas.style.marginLeft = '';
   const q = renderQuality(devicePixelRatio, w, lw);
   const cw = Math.round(lw * q), ch = Math.round(lh * q);
   if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
@@ -443,7 +464,7 @@ function frame(now) {
   if (sim.mode !== 'map' || drone) mapTarget = null;
   ctx.setTransform(canvas.q || 1, 0, 0, canvas.q || 1, 0, 0); // logische Koordinaten, Auflösung passend zur Anzeige
   if (drone) drawDroneView(ctx, game.lake, drone);
-  else if (sim.mode === 'slice') drawSlice(ctx, game.lake, sim);
+  else if (sim.mode === 'slice') { drawSlice(ctx, game.lake, sim); panCanvas(1 / 60); }
   else {
     drawMap(ctx, game.lake, sim, game.jobs);
     if (mapTarget) { // Ziel-Markierung
