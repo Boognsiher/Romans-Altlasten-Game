@@ -51,7 +51,8 @@ export function createInput(canvas) {
       if (!dx && !dy) { dx = virtual.dx; dy = virtual.dy; } // Touch-Stick
       if (!dx && !dy && pointer.active && (!holdToMove || pointer.down)) {
         const tx = pointer.x - cur.x, ty = pointer.y - cur.y, d = Math.hypot(tx, ty);
-        if (d > 8) { const k = Math.min(1, d / 40); dx = (tx / d) * k; dy = (ty / d) * k; }
+        if (d > 4) { const k = Math.min(1, d / 16); // schon kleiner Abstand = volles Tempo, ohne Anlaufphase
+          dx = (tx / d) * k; dy = (ty / d) * k; }
       }
       return { dx, dy, suction: keys.has('Space') || pointer.down || virtual.suction };
     },

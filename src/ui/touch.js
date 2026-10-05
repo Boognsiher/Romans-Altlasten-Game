@@ -3,6 +3,7 @@ import { snapStick } from './touch-logic.js';
 // Touch-Bedienung: Daumen-Stick links (vier Richtungen), grosser Knopf rechts
 // (Karte: Anker werfen, Querschnitt: Saugen halten). Beide arbeiten unabhängig voneinander (Mehrfinger).
 const KNOB_RADIUS = 38;
+const DEAD = 5; // Totzone des Sticks in Pixeln: klein, damit der Ponton sofort losfährt
 
 export function setupTouch(input, hooks) {
   const root = document.getElementById('touch-ui'), stick = document.getElementById('stick'), knob = document.getElementById('knob');
@@ -18,9 +19,9 @@ export function setupTouch(input, hooks) {
     const r = stick.getBoundingClientRect(), vx = e.clientX - (r.left + r.width / 2), vy = e.clientY - (r.top + r.height / 2);
     let s;
     if (analog) { // stufenlos: Ausschlag = Tempo
-      const len = Math.hypot(vx, vy), k = len < 14 ? 0 : Math.min(1, len / (KNOB_RADIUS * 1.4)) / len;
+      const len = Math.hypot(vx, vy), k = len < DEAD ? 0 : Math.min(1, len / KNOB_RADIUS) / len;
       s = { dx: vx * k, dy: vy * k };
-    } else s = snapStick(vx, vy, 14, input.virtual);
+    } else s = snapStick(vx, vy, DEAD, input.virtual);
     input.virtual.dx = s.dx; input.virtual.dy = s.dy;
     const len = Math.hypot(vx, vy) || 1, k = Math.min(1, KNOB_RADIUS / len);
     knob.style.transform = `translate(${vx * k}px, ${vy * k}px)`;
