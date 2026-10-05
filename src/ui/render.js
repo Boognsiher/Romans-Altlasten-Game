@@ -225,6 +225,18 @@ export function drawSlice(ctx, lake, sim) {
   for (const [x, y] of fine((c) => G(c) + CONFIG.drone.acceptMax)) ctx.lineTo(x, y);
   for (const [x, y] of fine((c) => G(c) - CONFIG.layer.tolerance).reverse()) ctx.lineTo(x, y);
   ctx.closePath(); ctx.fillStyle = 'rgba(123,216,143,.22)'; ctx.fill();
+  // Toleranzlinien: unten (orange) ab hier gilt es als zu tief, oben (grün) ab hier bleibt Restschmutz
+  const edge = (f, color) => {
+    ctx.beginPath(); ctx.moveTo(xs(0), yOf(f(0)));
+    for (const [x, y] of fine(f)) ctx.lineTo(x, y);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
+  };
+  edge((c) => G(c) - CONFIG.layer.tolerance, '#ffae4d');
+  edge((c) => G(c) + CONFIG.drone.acceptMax, '#7bd88f');
+  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffc98a'; ctx.fillText(`Toleranz −${Math.round(CONFIG.layer.tolerance * 100)} cm: tiefer = zu tief`, W - 8, yOf(G(SLICE.cols - 1) - CONFIG.layer.tolerance) + 14);
+  ctx.fillStyle = '#a8e8b6'; ctx.fillText(`+${Math.round(CONFIG.drone.acceptMax * 100)} cm: darunter gilt als sauber`, W - 8, yOf(G(SLICE.cols - 1) + CONFIG.drone.acceptMax) - 6);
+  ctx.textAlign = 'start';
   // Markierungen je Spalte über alle Zeilen des Kastens: Restschicht (rot, ▼) und zu tief (orange, ▲). Gefüllt = in der gezeigten Zeile,
   // hohl = in einer Nachbarzeile des Kastens (dort sieht man es im Querschnitt nicht).
   ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'center';
@@ -248,7 +260,7 @@ export function drawSlice(ctx, lake, sim) {
       const y = yOf(G(c)) + 16;
       ctx.beginPath(); ctx.moveTo(x - 6, y + 8); ctx.lineTo(x + 6, y + 8); ctx.lineTo(x, y - 2); ctx.closePath();
       if (deepShown) { ctx.fillStyle = '#ffae4d'; ctx.fill(); } else { ctx.strokeStyle = '#ffae4d'; ctx.lineWidth = 2; ctx.stroke(); }
-      ctx.fillStyle = '#ffc98a'; ctx.fillText(`−${Math.round(deep * 100)} cm`, x, y + 22);
+      ctx.fillStyle = '#ffc98a'; ctx.fillText(`−${Math.round((deep + CONFIG.layer.tolerance) * 100)} cm`, x, y + 22);
     }
   }
   ctx.textAlign = 'start';

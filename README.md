@@ -82,6 +82,6 @@ Beim ersten Öffnen fragt das Spiel nach einem Passwort (`CONFIG.passwordHash`, 
 
 ## Tiefenprofil: Fertig-Band und Markierungen
 
-- Um die Sollsohle (gelb gestrichelt) liegt ein grünes **Fertig-Band**: Toleranz nach unten (`layer.tolerance`), Restschicht nach oben (`drone.acceptMax`). Wer im Band liegt, gilt als sauber, bei der Pumpe wie bei der Drohne (vorher waren die Grenzen verschieden und Reste von 5 bis 10 cm kaum zu sehen).
+- Um die Sollsohle (gelb gestrichelt) liegt ein grünes **Fertig-Band** mit zwei **Toleranzlinien** (orange unten: ab hier zu tief, grün oben: darunter gilt als sauber): Toleranz nach unten (`layer.tolerance`), Restschicht nach oben (`drone.acceptMax`). Wer im Band liegt, gilt als sauber, bei der Pumpe wie bei der Drohne (vorher waren die Grenzen verschieden und Reste von 5 bis 10 cm kaum zu sehen).
 - Der Kasten umfasst mehrere Zeilen, der Querschnitt zeigt nur die mittlere. **Markierungen** zeigen für jede Spalte über alle Zeilen: Restschicht (rot ▼, cm) und zu tief (orange ▲). Gefüllt = in der gezeigten Zeile, hohl = in einer Nachbarzeile.
 - Die Saugkraft geht zuerst ins Material: Zellen und Zeilen, die schon sauber sind, bekommen weniger Anteil und werden nicht mehr in den Untergrund gefressen, solange daneben noch Schicht liegt (weniger "zu tief", obwohl die Linie noch nicht erreicht ist).
