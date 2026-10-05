@@ -1143,3 +1143,28 @@ test('Spielstand: kaputte oder fremde Daten werden abgelehnt', () => {
   assert.equal(restoreGame(JSON.stringify({ version: 99 })), null);
   assert.equal(savedSummary('nix'), null);
 });
+
+import { Fx } from '../src/ui/fx.js';
+
+test('Effekte: Material fliegt zum Saugmund und verschwindet, Beträge schweben und verblassen', () => {
+  const fx = new Fx(createRng(3));
+  const m = { x: 200, y: 100 };
+  fx.feed(m, 160, { removed: 0.2, toxicRemoved: 0, hardRemoved: 0 }, 0.016, 5);
+  assert.ok(fx.parts.length > 0 && fx.parts.length <= 10);
+  for (let i = 0; i < 200; i++) fx.update(0.016);
+  assert.equal(fx.parts.length, 0);
+  fx.feed(m, 160, { removed: 0, toxicRemoved: 0, hardRemoved: 0 }, 1, 50);
+  assert.equal(fx.floaters.length, 1);
+  for (let i = 0; i < 100; i++) fx.update(0.016);
+  assert.equal(fx.floaters.length, 0);
+});
+
+test('Effekte: harte Schicht und Verstopfung lassen den Bildschirm wackeln, Teilchenzahl bleibt begrenzt', () => {
+  const fx = new Fx(createRng(4));
+  fx.feed({ x: 0, y: 0 }, 50, { removed: 0.3, toxicRemoved: 0, hardRemoved: 0.3 }, 0.016);
+  assert.ok(fx.shake > 0);
+  for (let i = 0; i < 100; i++) fx.burst(0, 0, 30, 'hard');
+  assert.ok(fx.parts.length <= 260);
+  for (let i = 0; i < 200; i++) fx.update(0.016);
+  assert.equal(fx.shake, 0);
+});

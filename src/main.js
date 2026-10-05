@@ -7,8 +7,10 @@ import { setupTouch } from './ui/touch.js';
 import { steerToward } from './ui/touch-logic.js';
 import { fitSize, renderQuality } from './ui/layout.js';
 import { hintsFor } from './ui/hints.js';
+import { Fx } from './ui/fx.js';
+import { createAudio } from './ui/audio.js';
 import { serializeGame, restoreGame, savedSummary } from './sim/save.js';
-import { CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen } from './ui/render.js';
+import { CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
@@ -30,6 +32,8 @@ function saveGame() {
   try { localStorage.setItem(SAVE_KEY, serializeGame(game)); savedDay = game.day; saveClock = 0; } catch { /* Speicher voll oder gesperrt: egal */ }
 }
 
+const fx = new Fx();
+const audio = createAudio();
 let game = new Game();
 let sim = game.createSession(); // Ponton (Karte/Querschnitt), läuft immer
 let drone = null; // aktiver Drohnenflug, sonst null
@@ -294,6 +298,7 @@ function updateHints() {
 const currentMode = () => (drone ? 'drone' : sim.mode);
 function syncMode() {
   const mode = currentMode();
+  fx.clear(); audio.hum(false, 0);
   const size = mode === 'slice' || mode === 'drone' ? 'slice' : 'map';
   if (size !== shownSize) { size === 'slice' ? sizeSlice(canvas) : sizeMap(canvas, game.lake); shownSize = size; }
   $('shift-hud').hidden = false;
@@ -308,7 +313,8 @@ function syncMode() {
 function anchor() { if (!drone && sim.anchor()) syncMode(); }
 function leave() { if (!drone && sim.leave()) syncMode(); }
 function toggleAuto() { if (!drone) sim.toggleAuto(); }
-function togglePump() { if (!drone) sim.togglePump(); }
+function toggleSound() { audio.setMuted(!audio.muted); $('btn-sound').textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
+function togglePump() { if (!drone && sim.togglePump()) audio.toggle(sim.pumpOn); }
 function fixAuto() { if (!drone) sim.fixAuto(); }
 function setCut(v) {
   sim.setCutDepth(v);
@@ -380,6 +386,8 @@ $('btn-drone').onclick = startDrone;
 $('btn-drone2').onclick = startDrone;
 $('btn-recall').onclick = recall;
 $('btn-pump').onclick = togglePump;
+$('btn-sound').onclick = toggleSound;
+$('btn-sound').textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)';
 $('btn-pause').onclick = togglePause;
 addEventListener('resize', fitCanvas);
 addEventListener('orientationchange', () => setTimeout(fitCanvas, 200));
@@ -409,6 +417,8 @@ function frame(now) {
   const running = !paused && !sheetOpen && !overlayOpen() && game.status === 'playing';
   touch?.setMode(currentMode());
 
+  if (!running) audio.hum(false, 0);
+  if (readInput.tap('KeyM')) toggleSound();
   if (running) {
     saveClock += dt;
     if (game.day !== savedDay || saveClock > 20) saveGame();
@@ -449,8 +459,22 @@ function frame(now) {
         }
       }
       sim.bufferRoom = game.bufferRoom;
-      game.collect(sim.update(dt, inp));
-      for (const n of sim.notes.splice(0)) toast(n.text, n.kind);
+      const before = game.money, d = sim.update(dt, inp);
+      game.collect(d);
+      for (const n of sim.notes.splice(0)) {
+        toast(n.text, n.kind);
+        if (sim.mode === 'slice' && (n.kind === 'clog' || n.kind === 'tip')) { // Brocken fliegen, Wackeln, Ton, Vibration
+          const m = sliceMouthScreen(sim.slice);
+          fx.burst(m.x, m.y, n.kind === 'tip' ? 40 : 18, n.kind === 'tip' ? 'dust' : 'hard');
+          audio[n.kind]();
+          try { navigator.vibrate?.(n.kind === 'tip' ? [80, 40, 120] : 40); } catch { /* egal */ }
+        }
+      }
+      if (sim.mode === 'slice') {
+        const m = sliceMouthScreen(sim.slice), load = Math.min(1, d.removed / Math.max(1e-6, sim.stats.power * dt));
+        fx.feed(m, sliceY(sim.slice.surfaceAt(sim.slice.mouth().x)), d, dt, Math.max(0, game.money - before));
+        audio.hum(sim.pumpOn && sim.slice.suctioning, load);
+      }
       if (sim.mode === 'slice') {
         const sl = sim.slice;
         $('btn-auto').hidden = sim.stats.autoLevel <= 0;
@@ -468,6 +492,7 @@ function frame(now) {
       $('s-turb').value = sim.turbidity;
       $('s-tilt').value = sim.mode === 'slice' ? sim.slice.tilt : 0;
     }
+    fx.update(dt);
     game.update(dt);
     for (const n of game.notes.splice(0)) toast(n.text, n.kind);
   }
@@ -481,7 +506,11 @@ function frame(now) {
   if (sim.mode !== 'map' || drone) mapTarget = null;
   ctx.setTransform(canvas.q || 1, 0, 0, canvas.q || 1, 0, 0); // logische Koordinaten, Auflösung passend zur Anzeige
   if (drone) drawDroneView(ctx, game.lake, drone);
-  else if (sim.mode === 'slice') { drawSlice(ctx, game.lake, sim); panCanvas(1 / 60); }
+  else if (sim.mode === 'slice') {
+    const o = fx.offset();
+    ctx.save(); ctx.translate(o.x, o.y); drawSlice(ctx, game.lake, sim); fx.draw(ctx); ctx.restore();
+    panCanvas(1 / 60);
+  }
   else {
     drawMap(ctx, game.lake, sim, game.jobs);
     if (mapTarget) { // Ziel-Markierung

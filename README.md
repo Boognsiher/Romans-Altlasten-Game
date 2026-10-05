@@ -62,3 +62,7 @@ Balancing (alle Zahlen in `src/config.js`), Speichern (localStorage), Sound, Ere
 ## Speichern
 
 Das Spiel speichert automatisch im Browser (`localStorage`, Schlüssel `altlasten.save`): bei jedem neuen Spieltag, alle 20 Sekunden, beim Pausieren, beim Öffnen des Panels und beim Verlassen der Seite. Gespeichert werden Geld, Zeit, Upgrades, Anlage, Nachträge, Funde, Aufträge und der Seegrund. Die laufende Pontonfahrt nicht: nach dem Laden steht der Ponton wieder auf der Karte. Im Startbild gibt es "Weiterspielen" und "Neues Spiel"; nach dem Spielende wird der Stand gelöscht (der Rekord bleibt). Code: `src/sim/save.js`.
+
+## Abbau-Gefühl (Effekte)
+
+Im Querschnitt fliegt abgesaugtes Material (braun, hart = grau, Altlast = orange) in den Saugmund, Vergütungen schweben als "+CHF" hoch, harte Schichten und Verstopfungen lassen das Bild wackeln (Brocken fliegen weg, am Handy vibriert es kurz), und das Profil wird weich gezeichnet. Die Pumpe brummt, Tonhöhe und Lautstärke folgen der Last; Ton lässt sich mit M oder dem Ton-Knopf abschalten. Code: `src/ui/fx.js`, `src/ui/audio.js`.

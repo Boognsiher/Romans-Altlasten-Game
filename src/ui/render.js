@@ -173,6 +173,7 @@ export function drawDroneView(ctx, lake, d) {
 
 // ---------- Instanz 2: Querschnitt ----------
 const yOf = (h) => SLICE_TOP + (SLICE.viewH - h) * U;
+export const sliceY = (h) => yOf(h); // Bildhöhe (px) zu Höhe im See
 export function sliceHeadScreen(sl) { return { x: (sl.x - sl.x0) * U, y: yOf(sl.h) }; } // Pumpenstandort
 export function sliceMouthScreen(sl) { const m = sl.mouth(); return { x: (m.x - sl.x0) * U, y: yOf(m.h) }; } // Einsaugstelle
 
@@ -194,21 +195,29 @@ export function drawSlice(ctx, lake, sim) {
   // Profil: fester Untergrund, belastete Schicht (überall gleich dick) und Übertiefung als Flächen
   const col = (c) => lake.idx(sl.x0 + c, sl.row), xs = (c) => (c + 0.5) * U;
   const T = (c) => lake.top[col(c)], G = (c) => lake.target[col(c)];
+  // Profil weich gezeichnet: zwischen den Zellmitten wird mit einer Kosinuskurve verbunden (Mulden statt Treppen)
+  const fine = (f) => {
+    const out = [];
+    for (let c = 0; c < SLICE.cols - 1; c++) for (let k = 0; k < 6; k++) { const t = k / 6, e = (1 - Math.cos(Math.PI * t)) / 2; out.push([xs(c) + (xs(c + 1) - xs(c)) * t, yOf(f(c) + (f(c + 1) - f(c)) * e)]); }
+    out.push([xs(SLICE.cols - 1), yOf(f(SLICE.cols - 1))]);
+    return out;
+  };
+  const trace = (f) => { for (const [x, y] of fine(f)) ctx.lineTo(x, y); };
   const band = (lowerH, upperH, fill) => {
     ctx.beginPath(); ctx.moveTo(0, yOf(upperH(0)));
-    for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(upperH(c)));
+    trace(upperH);
     ctx.lineTo(W, yOf(upperH(SLICE.cols - 1))); ctx.lineTo(W, yOf(lowerH(SLICE.cols - 1)));
-    for (let c = SLICE.cols - 1; c >= 0; c--) ctx.lineTo(xs(c), yOf(lowerH(c)));
+    for (const [x, y] of fine(lowerH).reverse()) ctx.lineTo(x, y);
     ctx.lineTo(0, yOf(lowerH(0))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
   };
   band(() => 0, (c) => Math.min(T(c), G(c)), '#5d5b52'); // fester Untergrund
   band((c) => Math.min(T(c), G(c)), G, 'rgba(235,90,60,.5)'); // Übertiefung: tiefer als die Sollsohle
   band(G, (c) => Math.max(T(c), G(c)), '#7a5f3c'); // belastete Schicht
   ctx.beginPath(); ctx.moveTo(0, yOf(T(0)));
-  for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(T(c)));
+  trace(T);
   ctx.lineTo(W, yOf(T(SLICE.cols - 1))); ctx.strokeStyle = '#a58760'; ctx.lineWidth = 3; ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, yOf(G(0))); // Sollsohle
-  for (let c = 0; c < SLICE.cols; c++) ctx.lineTo(xs(c), yOf(G(c)));
+  trace(G);
   ctx.lineTo(W, yOf(G(SLICE.cols - 1)));
   ctx.strokeStyle = '#ffd24dcc'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.stroke(); ctx.setLineDash([]);
   if (sl.h - sl.setH > 0.05) { // eingestellte Höhe der Pumpe: dorthin sinkt sie zurück
