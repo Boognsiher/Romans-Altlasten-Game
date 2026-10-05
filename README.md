@@ -70,3 +70,7 @@ Im Querschnitt fliegt abgesaugtes Material (braun, hart = grau, Altlast = orange
 ## Minispiel: Pumpe freispülen
 
 Verstopft von Hand ein Fremdstoff die Pumpe, startet das Freispülen: ein Marker pendelt über einen Balken, mit Leertaste (bzw. dem grossen Knopf am Handy) im grünen Bereich auslösen. Zwei Treffer lösen den Pfropfen sofort, jeder Treffer macht den Marker schneller; ein Fehlversuch verlängert die Verstopfung um 1 s. Wer nichts tut, wartet 6 s. Die Automatik spielt das Minispiel nicht (feste Wartezeit je Stufe). Werte: `CONFIG.unclog`, `CONFIG.debris.clogSeconds`.
+
+## Startpasswort
+
+Beim ersten Öffnen fragt das Spiel nach einem Passwort (`CONFIG.passwordHash`, nur der SHA-256-Hash steht im Code). Nach der Eingabe merkt sich der Browser das auf diesem Gerät. Ändern: `node tools/set-password.mjs <Passwort>` (ohne Argument entfernt es die Abfrage). Wichtig: Das ist eine reine Browser-Schranke. Der Code ist öffentlich lesbar, ein Entschlossener kommt also vorbei. Sie hält nur Neugierige ab.

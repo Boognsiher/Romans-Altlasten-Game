@@ -1210,3 +1210,16 @@ test('Freispülen: die Automatik spielt das Minispiel nicht', () => {
   assert.ok(sl.clog > 0, 'Automatik hat sich verstopft');
   assert.equal(sl.freeing, null);
 });
+
+import { sha256, checkPassword, hashPassword } from '../src/ui/gate.js';
+import { createHash } from 'node:crypto';
+
+test('Passwort: SHA-256 stimmt mit Node überein, Prüfung ignoriert Leerzeichen am Rand und kennt nur das richtige Passwort', () => {
+  for (const s of ['', 'abc', 'Uetikon2026', 'äöü€', 'x'.repeat(200)]) assert.equal(sha256(s), createHash('sha256').update(s).digest('hex'));
+  assert.ok(CONFIG.passwordHash.length === 64);
+  assert.ok(checkPassword('Uetikon2026', CONFIG.passwordHash));
+  assert.ok(checkPassword('  Uetikon2026 ', CONFIG.passwordHash));
+  assert.ok(!checkPassword('uetikon2026', CONFIG.passwordHash));
+  assert.ok(!checkPassword('', CONFIG.passwordHash));
+  assert.notEqual(hashPassword('a'), hashPassword('b'));
+});

@@ -8,6 +8,7 @@ import { steerToward } from './ui/touch-logic.js';
 import { fitSize, renderQuality } from './ui/layout.js';
 import { hintsFor } from './ui/hints.js';
 import { Fx } from './ui/fx.js';
+import { checkPassword } from './ui/gate.js';
 import { createAudio } from './ui/audio.js';
 import { serializeGame, restoreGame, savedSummary } from './sim/save.js';
 import { CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
@@ -536,30 +537,51 @@ const saved = (() => { const t = readSave(); const m = t && savedSummary(t); ret
 buildUpgrades();
 syncMode();
 updatePanel();
-showOverlay(`<h2>Seesanierung Uetikon</h2>
-  <p>Das Spiel läuft in <b>Echtzeit</b>: Für jeden abgesaugten m³ der belasteten Schicht gibt es ${CONFIG.pay.perM3} CHF (Altlasten ${Math.round(CONFIG.pay.perM3 * CONFIG.pay.toxicMultiplier)} CHF), zu tief abgetragener Boden wird nicht bezahlt. Entsorgung, Analyse, Bussen und Reparaturen kosten. Zusatzleistungen (Fremdstoffe, harte Schicht, Fässer) rechnest du als <b>Nachträge</b> beim Bauherrn ab: je höher die Forderung, desto unwahrscheinlicher die Genehmigung. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
-  was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
-  <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
-    <p><b>Stick</b> links fährt den Ponton auf der Karte. Im Querschnitt steuerst du die Pumpe nur mit den <b>Pfeil-Knöpfen</b> (halten = fahren) und stellst mit dem <b>Tempo-Regler</b> ein, wie schnell sie fährt (langsam = tieferer Schnitt, mehr Kippgefahr). Der grosse Knopf rechts wirft auf der Karte den Anker und schaltet im Querschnitt die <b>Pumpe ein und aus</b> (sie saugt dann auch im Stillstand, rückwärts nie). Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
-    Unter dem Spielfeld stehen Zurück zur Karte, Automatik, Reset und Drohne (dort steuert der Stick in alle Richtungen, der grosse Knopf holt sie ein), oben rechts die Pause. Der Shop liegt unten im Fach „Anlage &amp; Ausrüstung“; solange es offen ist, steht das Spiel still.</p></details>
-  <details ${isTouch ? '' : 'open'}><summary>Steuerung am Computer</summary>
-    <p>Karte: WASD / Pfeile (oder Maus gedrückt) fahren, <b>E</b> / Leertaste wirft den Anker. Querschnitt: A/D fährt die Pumpe seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse), <b>Leertaste</b> schaltet die Pumpe ein und aus: Sie saugt auch im Stillstand und vorwärts, rückwärts nie.
-    <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>Z/X</b> Tempo der Pumpe, <b>V</b> Drohne ausbringen (Q holt sie ein), <b>P</b> Pause. Drohne: WASD/Pfeile in beide Achsen.</p></details>
-  <details><summary>Regeln im See</summary>
-    <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, die Pumpe saugt nur am Boden im Material (im freien Wasser trübt sie nichts), rückwärts fahren saugt nicht. Gräbst du zu tief, kippt sie um.</p>
-    <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
-    Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> fährst du aus dem verankerten Ponton aus (V oder Knopf): Sie taucht nur im Kasten unter dem Ponton, sieht nur im Lichtkegel in Fahrtrichtung (leicht nach unten) und scannt den Boden, wenn du langsam und nah daran fährst. Sie nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
-  <button class="primary" id="btn-go">Los</button>`);
-$('btn-go').onclick = () => { if (saved) clearSave(); hideOverlay(); };
-if (saved) {
-  const b = document.createElement('button');
-  b.className = 'primary'; b.id = 'btn-continue';
-  b.textContent = `Weiterspielen (Tag ${saved.day}, ${chf(saved.money)})`;
-  b.onclick = () => { const g = restoreGame(readSave()); if (g) restart(g); else { clearSave(); hideOverlay(); } };
-  $('btn-go').before(b);
-  $('btn-go').textContent = 'Neues Spiel';
-  $('btn-go').classList.remove('primary');
+function showIntro() {
+  showOverlay(`<h2>Seesanierung Uetikon</h2>
+    <p>Das Spiel läuft in <b>Echtzeit</b>: Für jeden abgesaugten m³ der belasteten Schicht gibt es ${CONFIG.pay.perM3} CHF (Altlasten ${Math.round(CONFIG.pay.perM3 * CONFIG.pay.toxicMultiplier)} CHF), zu tief abgetragener Boden wird nicht bezahlt. Entsorgung, Analyse, Bussen und Reparaturen kosten. Zusatzleistungen (Fremdstoffe, harte Schicht, Fässer) rechnest du als <b>Nachträge</b> beim Bauherrn ab: je höher die Forderung, desto unwahrscheinlicher die Genehmigung. In ${CONFIG.deadlineDays} Tagen (${Math.round(CONFIG.deadlineDays * CONFIG.daySeconds / 60)} Minuten) ist Schluss:
+    was dann noch im See liegt, saniert eine Fremdfirma zum Notfalltarif. <b>Gewonnen hat, wer am Ende am meisten Geld hat.</b></p>
+    <details ${isTouch ? 'open' : ''}><summary>Steuerung am Handy</summary>
+      <p><b>Stick</b> links fährt den Ponton auf der Karte. Im Querschnitt steuerst du die Pumpe nur mit den <b>Pfeil-Knöpfen</b> (halten = fahren) und stellst mit dem <b>Tempo-Regler</b> ein, wie schnell sie fährt (langsam = tieferer Schnitt, mehr Kippgefahr). Der grosse Knopf rechts wirft auf der Karte den Anker und schaltet im Querschnitt die <b>Pumpe ein und aus</b> (sie saugt dann auch im Stillstand, rückwärts nie). Ein <b>Tipp auf die Karte</b> fährt hin und ankert dort.
+      Unter dem Spielfeld stehen Zurück zur Karte, Automatik, Reset und Drohne (dort steuert der Stick in alle Richtungen, der grosse Knopf holt sie ein), oben rechts die Pause. Der Shop liegt unten im Fach „Anlage &amp; Ausrüstung“; solange es offen ist, steht das Spiel still.</p></details>
+    <details ${isTouch ? '' : 'open'}><summary>Steuerung am Computer</summary>
+      <p>Karte: WASD / Pfeile (oder Maus gedrückt) fahren, <b>E</b> / Leertaste wirft den Anker. Querschnitt: A/D fährt die Pumpe seitlich, W/S zieht sie hoch oder lässt sie runter (immer nur eine Achse), <b>Leertaste</b> schaltet die Pumpe ein und aus: Sie saugt auch im Stillstand und vorwärts, rückwärts nie.
+      <b>Q</b> zurück zur Karte, <b>T</b> Automatik, <b>R</b> Reset, <b>F/G</b> Abtragsdicke, <b>Z/X</b> Tempo der Pumpe, <b>V</b> Drohne ausbringen (Q holt sie ein), <b>P</b> Pause. Drohne: WASD/Pfeile in beide Achsen.</p></details>
+    <details><summary>Regeln im See</summary>
+      <p>Die Pumpe hängt an einer Kette und schwebt, wo du sie lässt. Der Einsaugbereich liegt unten rechts, die Pumpe saugt nur am Boden im Material (im freien Wasser trübt sie nichts), rückwärts fahren saugt nicht. Gräbst du zu tief, kippt sie um.</p>
+      <p>Schraffierte Zellen sind hart: mehrere Überfahrten. Weisse Punkte sind Fremdstoffe, die die Pumpe verstopfen (Kopf anheben hilft). Rot = Altlasten.
+      Die belastete Schicht ist überall 1 m dick (braun, gelb gestrichelt = Sollsohle); wer tiefer saugt, zahlt dafür (orange auf der Karte). Mit dem <b>Echolot</b> fährt die Automatik eine eingestellte Abtragsdicke an. Die <b>Tauchdrohne</b> fährst du aus dem verankerten Ponton aus (V oder Knopf): Sie taucht nur im Kasten unter dem Ponton, sieht nur im Lichtkegel in Fahrtrichtung (leicht nach unten) und scannt den Boden, wenn du langsam und nah daran fährst. Sie nimmt den Seegrund ab, entdeckt Fossilien im Untergrund (das Museum zahlt für die Bergung, zerstörte sind weg und kosten) und verkauft Befliegungsdaten an die Behörde. Die Gemeinde bietet <b>Zusatzaufträge</b> an: Zone bis zum Termin sauber und abgenommen = Prämie.</p></details>
+    <button class="primary" id="btn-go">Los</button>`);
+  $('btn-go').onclick = () => { if (saved) clearSave(); hideOverlay(); };
+  if (saved) {
+    const b = document.createElement('button');
+    b.className = 'primary'; b.id = 'btn-continue';
+    b.textContent = `Weiterspielen (Tag ${saved.day}, ${chf(saved.money)})`;
+    b.onclick = () => { const g = restoreGame(readSave()); if (g) restart(g); else { clearSave(); hideOverlay(); } };
+    $('btn-go').before(b);
+    $('btn-go').textContent = 'Neues Spiel';
+    $('btn-go').classList.remove('primary');
+  }
 }
+
+// Passwort vor dem Start (Hash in config.js); gemerkt wird nur auf diesem Gerät
+const UNLOCK_KEY = 'altlasten.unlocked';
+const unlocked = () => { try { return localStorage.getItem(UNLOCK_KEY) === CONFIG.passwordHash; } catch { return false; } };
+function showGate() {
+  showOverlay(`<h2>Seesanierung Uetikon</h2>
+    <p>Bitte das Passwort eingeben.</p>
+    <form id="gate-form"><input id="gate-pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Passwort" style="width:100%;padding:12px;font-size:18px;border-radius:8px;border:1px solid #ffffff44;background:#0e1a24;color:inherit">
+    <p id="gate-err" class="warn" style="min-height:1.4em;margin:6px 0"></p>
+    <button class="primary" type="submit">Starten</button></form>`);
+  const pw = $('gate-pw');
+  pw.focus();
+  $('gate-form').onsubmit = (e) => {
+    e.preventDefault();
+    if (checkPassword(pw.value, CONFIG.passwordHash)) { try { localStorage.setItem(UNLOCK_KEY, CONFIG.passwordHash); } catch { /* egal */ } showIntro(); }
+    else { $('gate-err').textContent = 'Falsches Passwort. Der Kanton lässt grüssen.'; pw.select(); }
+  };
+}
+if (!CONFIG.passwordHash || unlocked()) showIntro(); else showGate();
 addEventListener('pagehide', saveGame);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
 requestAnimationFrame(frame);

@@ -1,5 +1,7 @@
 // Zentrale Spielbalance. Alle Zahlen hier ändern, nichts in der Logik verstecken.
 export const CONFIG = {
+  // Passwort vor dem Start: SHA-256 von "altlasten:<Passwort>" (leer = kein Passwort). Neu setzen: node tools/set-password.mjs <Passwort>
+  passwordHash: '50c63e46b626d00714b1a06168a3e4bc528f33d020d02827729524c71009c3dc',
   lake: { cols: 48, rows: 30, blobs: 22, toxicBlobs: 7 },
   // Das Spiel läuft in Echtzeit. Gewonnen hat, wer am Ende am meisten Geld hat.
   daySeconds: 15, // ein Spieltag in Sekunden (150 Tage = 37,5 Minuten)
