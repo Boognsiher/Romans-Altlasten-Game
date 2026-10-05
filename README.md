@@ -79,3 +79,9 @@ Beim ersten Öffnen fragt das Spiel nach einem Passwort (`CONFIG.passwordHash`, 
 
 - **Rückbau:** Neben jedem Ausbau steht ein ↩-Knopf (zweiter Tipp bestätigt). Er verkauft die zuletzt gekaufte Stufe und gibt `CONFIG.refundShare` (75 %) ihrer damaligen Kosten zurück; die Kosten für den Rückbau stehen in der Beschreibung.
 - **Fremdstoffe:** Jeder hat im Freispülen eine eigene Schwierigkeit (`CONFIG.debrisInfo`): Fischerhut und Gartenzwerg sind leicht (breites Grün, ein Treffer), Stossstange und Kinderwagen schwer (schmal, drei Treffer, lange Wartezeit); im Balken steht der Name des Fremdstoffs.
+
+## Tiefenprofil: Fertig-Band und Markierungen
+
+- Um die Sollsohle (gelb gestrichelt) liegt ein grünes **Fertig-Band**: Toleranz nach unten (`layer.tolerance`), Restschicht nach oben (`drone.acceptMax`). Wer im Band liegt, gilt als sauber, bei der Pumpe wie bei der Drohne (vorher waren die Grenzen verschieden und Reste von 5 bis 10 cm kaum zu sehen).
+- Der Kasten umfasst mehrere Zeilen, der Querschnitt zeigt nur die mittlere. **Markierungen** zeigen für jede Spalte über alle Zeilen: Restschicht (rot ▼, cm) und zu tief (orange ▲). Gefüllt = in der gezeigten Zeile, hohl = in einer Nachbarzeile.
+- Die Saugkraft geht zuerst ins Material: Zellen und Zeilen, die schon sauber sind, bekommen weniger Anteil und werden nicht mehr in den Untergrund gefressen, solange daneben noch Schicht liegt (weniger "zu tief", obwohl die Linie noch nicht erreicht ist).

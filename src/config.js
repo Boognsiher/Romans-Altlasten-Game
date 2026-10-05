@@ -33,7 +33,7 @@ export const CONFIG = {
   layer: {
     thickness: 1, // m
     cellArea: 4, // m² pro Rasterzelle: m³ = Dicke * cellArea
-    snap: 0.04, // m: so kleine Reste gelten beim Absaugen als erledigt
+    snap: 0.08, // m: so kleine Reste gelten beim Absaugen als erledigt (kleiner als drone.acceptMax)
     tolerance: 0.15, // m unter der Sollsohle, die noch als sauber abgetragen gelten (Schnitte sind nie exakt)
     groundFirmness: 0.35, // Untergrund lässt sich nur mit diesem Anteil der Leistung abtragen
     overdigCostPerM3: 120, // CHF pro m³ zu viel abgetragen (Wiederauffüllung, Gewässerschutz)
@@ -113,7 +113,7 @@ export const CONFIG = {
   pumpSpeed: { min: 0.2, max: 1, default: 1 }, // Tempo-Regler der Pumpe (Anteil des Höchsttempos)
   // Tauchdrohne: Abnahme des gereinigten Seegrunds und Befliegungsdaten
   drone: {
-    fee: 800, acceptMax: 0.1, winAcceptFraction: 0.9, // höchstens so viel Restschicht (m) pro Zelle für eine Abnahme
+    fee: 800, acceptMax: 0.12, winAcceptFraction: 0.9, // höchstens so viel Restschicht (m) pro Zelle für eine Abnahme
     docPerCell: 8, // CHF, die die Behörde pro neu dokumentierter Zelle zahlt (vorher und nachher, je einmal)
     // Die Drohne taucht nur im Kasten unter dem Ponton (Querschnittsfenster). Sie sieht nur im Lichtkegel in Fahrtrichtung,
     // leicht nach unten; gescannt wird nur, was beleuchtet ist, wenn sie langsam und nah am Boden fährt.

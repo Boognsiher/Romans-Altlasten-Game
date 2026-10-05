@@ -220,6 +220,38 @@ export function drawSlice(ctx, lake, sim) {
   trace(G);
   ctx.lineTo(W, yOf(G(SLICE.cols - 1)));
   ctx.strokeStyle = '#ffd24dcc'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.stroke(); ctx.setLineDash([]);
+  // Fertig-Band um die Sollsohle (grün): wer darin liegt, gilt als sauber (Toleranz nach unten, Restschicht nach oben)
+  ctx.beginPath();
+  for (const [x, y] of fine((c) => G(c) + CONFIG.drone.acceptMax)) ctx.lineTo(x, y);
+  for (const [x, y] of fine((c) => G(c) - CONFIG.layer.tolerance).reverse()) ctx.lineTo(x, y);
+  ctx.closePath(); ctx.fillStyle = 'rgba(123,216,143,.22)'; ctx.fill();
+  // Markierungen je Spalte über alle Zeilen des Kastens: Restschicht (rot, ▼) und zu tief (orange, ▲). Gefüllt = in der gezeigten Zeile,
+  // hohl = in einer Nachbarzeile des Kastens (dort sieht man es im Querschnitt nicht).
+  ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'center';
+  for (let c = 0; c < SLICE.cols; c++) {
+    let rest = 0, restShown = false, deep = 0, deepShown = false;
+    sl.rows.forEach((r, k) => {
+      const i = lake.idx(sl.x0 + c, r);
+      if (!lake.initial[i]) return;
+      const m = lake.mass[i], dpt = lake.target[i] - lake.top[i] - CONFIG.layer.tolerance;
+      if (m >= CONFIG.drone.acceptMax && m <= 0.5 && m > rest) { rest = m; restShown = k === sl.ci; }
+      if (dpt > 1e-3 && dpt > deep) { deep = dpt; deepShown = k === sl.ci; }
+    });
+    const x = xs(c);
+    if (rest > 0) {
+      const y = yOf(G(c)) - 14;
+      ctx.beginPath(); ctx.moveTo(x - 6, y - 8); ctx.lineTo(x + 6, y - 8); ctx.lineTo(x, y + 2); ctx.closePath();
+      if (restShown) { ctx.fillStyle = '#ff7a6b'; ctx.fill(); } else { ctx.strokeStyle = '#ff7a6b'; ctx.lineWidth = 2; ctx.stroke(); }
+      ctx.fillStyle = '#ff9d90'; ctx.fillText(`${Math.round(rest * 100)} cm`, x, y - 12);
+    }
+    if (deep > 0) {
+      const y = yOf(G(c)) + 16;
+      ctx.beginPath(); ctx.moveTo(x - 6, y + 8); ctx.lineTo(x + 6, y + 8); ctx.lineTo(x, y - 2); ctx.closePath();
+      if (deepShown) { ctx.fillStyle = '#ffae4d'; ctx.fill(); } else { ctx.strokeStyle = '#ffae4d'; ctx.lineWidth = 2; ctx.stroke(); }
+      ctx.fillStyle = '#ffc98a'; ctx.fillText(`−${Math.round(deep * 100)} cm`, x, y + 22);
+    }
+  }
+  ctx.textAlign = 'start';
   if (sl.h - sl.setH > 0.05) { // eingestellte Höhe der Pumpe: dorthin sinkt sie zurück
     const hx = (sl.x - sl.x0) * U;
     ctx.beginPath(); ctx.moveTo(hx - 40, yOf(sl.setH)); ctx.lineTo(hx + 40, yOf(sl.setH));

@@ -130,7 +130,12 @@ export class Lake {
   // Gewichtetes Abtragen: verteilt `amount` (Höhe in m) auf die Zellen [index, gewicht].
   // Der feste Untergrund unter der Sollsohle geht nur mit groundFirmness. Gibt Höhen zurück:
   // removed (gesamt), toxicRemoved (aus der belasteten Schicht), overdug (unter der Sollsohle).
-  _drain(cells, amount) {
+  // Saugkraft geht zuerst ins Material: Zellen ohne belastete Schicht (nur noch Untergrund) bekommen nur einen Teil des Gewichts,
+  // sonst frisst die Pumpe den sauberen Boden, während daneben noch Schicht liegt.
+  _adj(cells) { return cells.map(([i, w]) => [i, this.mass[i] > 1e-6 ? w : w * CONFIG.layer.groundFirmness]); }
+
+  _drain(cells, amount, adjusted = false) {
+    if (!adjusted) cells = this._adj(cells);
     let wSum = 0, removed = 0, toxicRemoved = 0, overdug = 0, hardRemoved = 0;
     const fossilsLost = [];
     for (const c of cells) wSum += c[1];
@@ -205,10 +210,11 @@ export class Lake {
   // lokalen Oberfläche wie in der Mittelzeile).
   suckSwath(rows, centerRow, headX, headH, radius, amount) {
     const mc = Math.min(this.cols - 1, Math.max(0, Math.floor(headX))), base = this.top[this.idx(mc, centerRow)];
-    const work = rows.map((r) => this._profileCells(r, headX, Math.max(0, headH + (this.top[this.idx(mc, r)] - base)), radius)).filter((cells) => cells.length);
+    const work = rows.map((r) => this._adj(this._profileCells(r, headX, Math.max(0, headH + (this.top[this.idx(mc, r)] - base)), radius))).filter((cells) => cells.length);
+    const rowW = work.map((cells) => cells.reduce((a, c) => a + c[1], 0)), total = rowW.reduce((a, b) => a + b, 0);
     const sum = { removed: 0, toxicRemoved: 0, overdug: 0, hardRemoved: 0, fossilsLost: [] };
-    for (const cells of work) {
-      const res = this._vol(this._drain(cells, amount / work.length / this.area));
+    for (let k = 0; k < work.length; k++) { // die Leistung verteilt sich auf die Zeilen nach ihrem Bedarf (Gewicht), nicht gleichmässig
+      const res = this._vol(this._drain(work[k], (amount * rowW[k]) / total / this.area, true));
       sum.removed += res.removed; sum.toxicRemoved += res.toxicRemoved; sum.overdug += res.overdug; sum.hardRemoved += res.hardRemoved;
       sum.fossilsLost.push(...res.fossilsLost);
     }

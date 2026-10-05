@@ -956,13 +956,14 @@ test('Nach dem Abtragen meldet die Drohne keinen Restschmutz: Kasten ganz geräu
   assert.ok(d.newlyAccepted >= 12 * CONFIG.box.rows);
 });
 
-test('Abnahme: bis 10 cm Restschicht gelten als sauber, darüber ist es Restschmutz; winzige Reste werden beim Absaugen erledigt', () => {
+test('Abnahme: bis acceptMax Restschicht gelten als sauber, darüber ist es Restschmutz; winzige Reste werden beim Absaugen erledigt', () => {
   const g = new Game(72); const l = g.lake; l.setFlat(1, 3);
   const d = new DroneSim(l, g.stats, { x0: 8, row: 10 });
   const c = 6, i = l.idx(8 + c, 10);
-  l.mass[i] = 0.09; d._scanColumn(c);
+  const A = CONFIG.drone.acceptMax;
+  l.mass[i] = A - 0.01; d._scanColumn(c);
   assert.equal(l.accepted[i], 1);
-  l.mass[i] = 0.11; d.scanned[c] = 0; d._scanColumn(c);
+  l.mass[i] = A + 0.01; d.scanned[c] = 0; d._scanColumn(c);
   assert.equal(l.flagged[i], 1);
   const small = new Lake(4, 4); small.setFlat(1, 3);
   const k = small.idx(1, 1); small.top[k] = small.target[k] + CONFIG.layer.snap / 2; small.mass[k] = CONFIG.layer.snap / 2;
