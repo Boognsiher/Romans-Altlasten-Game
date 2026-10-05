@@ -22,6 +22,7 @@ export class Lake {
     this.flagged = new Uint8Array(n); // Drohne meldet Restschmutz
     this.fossil = new Uint8Array(n); // 0 nichts, sonst Index in FOSSILS + 1 (liegt im Untergrund unter der Sollsohle)
     this.fossilFound = new Uint8Array(n); // von der Drohne entdeckt
+    this.certified = new Uint8Array(n); // Zelle ist schon in einem Abnahmezertifikat enthalten
     this.docBits = new Uint8Array(n); // Befliegungsdaten: 1 = vorher dokumentiert, 2 = nachher dokumentiert
     this.initialTotal = 0;
   }

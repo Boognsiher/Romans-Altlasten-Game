@@ -1271,3 +1271,25 @@ test('Zeilenstatus: fertig erst, wenn keine Zelle der Zeile über acceptMax lieg
   assert.ok(!sl.rowStatus(other).done);
   assert.equal(sl.rowStatus(other).rest, 16);
 });
+
+test('Zertifikat: ab 90 % abgenommener Zellen, Prämie steigt mit der Qualität, 3 Tage Bearbeitung, nur einmal je Kasten', () => {
+  const mk = (frac, deepCells = 0) => {
+    const g = new Game(90); g.lake.setFlat(1, 3);
+    const x0 = 8, r0 = 8, L = g.lake; let k = 0; const total = 16 * CONFIG.box.rows, okN = Math.round(total * frac);
+    for (let y = r0; y < r0 + CONFIG.box.rows; y++) for (let x = x0; x < x0 + 16; x++) { const i = L.idx(x, y); if (k++ < okN) L.accepted[i] = 1; if (k <= deepCells) L.top[i] = L.target[i] - 0.5; }
+    return { g, x0, r0 };
+  };
+  const low = mk(0.85); assert.equal(low.g.issueCert(low.x0, low.r0), null); // unter 90 %
+  const a = mk(0.9), b = mk(1.0);
+  const ca = a.g.issueCert(a.x0, a.r0), cb = b.g.issueCert(b.x0, b.r0);
+  assert.ok(ca && cb && cb.premium > ca.premium, 'bessere Qualität = höhere Prämie');
+  assert.equal(ca.grade, 'Bronze'); assert.equal(cb.grade, 'Gold');
+  const dpt = mk(1.0, 20); assert.ok(dpt.g.issueCert(dpt.x0, dpt.r0).premium < cb.premium, 'Übertiefung drückt die Prämie');
+  assert.equal(b.g.issueCert(b.x0, b.r0), null, 'derselbe Kasten nicht zweimal');
+  // Einreichen und 3 Tage warten
+  const g = b.g, m0 = g.money;
+  assert.ok(g.submitCert(cb.id)); assert.equal(g.money, m0 - CONFIG.cert.fee); assert.equal(g.submitCert(cb.id), false);
+  g.update(2 * CONFIG.daySeconds); assert.equal(cb.status, 'submitted');
+  g.update(1.1 * CONFIG.daySeconds); assert.equal(cb.status, 'approved');
+  assert.equal(g.totals.certPaid, cb.premium);
+});

@@ -89,3 +89,7 @@ Beim ersten Öffnen fragt das Spiel nach einem Passwort (`CONFIG.passwordHash`, 
 ## Zeilen des Kastens einzeln fahren
 
 Der Kasten hat 5 Zeilen (`CONFIG.box.rows`). Die Pumpe bearbeitet nur die **gewählte Zeile**; gewechselt wird mit den Zeilen-Knöpfen 1 bis 5 (Tastatur: Ziffern 1 bis 5 oder Tab). Die Knöpfe zeigen den Fortschritt je Zeile (Füllung), grün = sauber, orange = Zellen zu tief. Die Pumpe bleibt beim Wechsel an ihrer Stelle, das Gelände der neuen Zeile kann sie anheben. Die Automatik arbeitet an der gewählten Zeile; die Vollautomatik (Stufe 3) macht danach mit der nächsten offenen Zeile weiter. Die Drohne misst am Ende den ganzen Kasten (alle Zeilen, Zelle für Zelle).
+
+## Gesamtbewertung und Zertifikat
+
+Nach jedem Drohnenflug wird der ganze Kasten (16 Spalten x 5 Zeilen) bewertet: Sind mindestens 90 % der bestellten Zellen abgenommen (`CONFIG.cert.minFraction`), stellt die Drohne ein **Abnahmezertifikat** aus (jede Zelle nur einmal, mindestens 10 neue Zellen). Es lässt sich ansehen und für 300 CHF beim Kanton einreichen; nach 3 Spieltagen Bearbeitung gibt der Kanton es frei und zahlt die **Prämie**. Die Prämie steigt mit der Qualität: Anteil sauberer Zellen über der Mindestquote (90 % = Bronze, 100 % = Gold, bis doppelte Prämie), abzüglich Zellen, die zu tief abgetragen wurden. Zertifikate stehen im Panel unter "Zertifikate" und werden mitgespeichert. Nicht eingereichte oder noch nicht freigegebene Zertifikate bringen bei Spielende nichts.

@@ -27,11 +27,13 @@ export class Game {
     this.cutDepth = CONFIG.echolot.defaultCut; // Abtragsdicke-Sollwert der Automatik
     this.pumpSpeed = CONFIG.pumpSpeed.default; // Tempo-Regler der Pumpe (bleibt gespeichert)
     this.overclock = false; // Anlage übertakten: mehr Durchsatz, höheres Risiko teurer Klassen
-    this.totals = { removed: 0, pay: 0, claimsPaid: 0, claimsFees: 0, claimsAccepted: 0, claimsPartial: 0, claimsRejected: 0, claimsExpired: 0, docPaid: 0, findsPaid: 0, findsFees: 0, findsSold: 0, fossilsLost: 0, fossilFines: 0, jobsDone: 0, jobsFailed: 0, jobsPaid: 0, jobsPenalty: 0, disposalPaid: 0, finesPaid: 0, repairsPaid: 0, overdigPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
+    this.totals = { removed: 0, pay: 0, claimsPaid: 0, claimsFees: 0, claimsAccepted: 0, claimsPartial: 0, claimsRejected: 0, claimsExpired: 0, docPaid: 0, certPaid: 0, certFees: 0, certsApproved: 0, findsPaid: 0, findsFees: 0, findsSold: 0, fossilsLost: 0, fossilFines: 0, jobsDone: 0, jobsFailed: 0, jobsPaid: 0, jobsPenalty: 0, disposalPaid: 0, finesPaid: 0, repairsPaid: 0, overdigPaid: 0, eventCosts: 0, overdug: 0, classes: { B: 0, E: 0, C: 0 } };
     this.today = freshDay();
     this.claims = []; // Nachträge: { id, kind, text, fair, markup, status: 'draft' | 'submitted', expiresAt, resolveAt, claimed }
     this.claimAcc = { hard: 0, toxic: 0 }; // gesammelter Mehraufwand, aus dem Nachträge entstehen
     this.claimSeq = 0;
+    this.certs = []; // Abnahmezertifikate: { id, serial, x0, r0, rows, cols, cells, fraction, quality, grade, day, premium, status: 'issued' | 'submitted' | 'approved', approveAt }
+    this.certSeq = 0;
     this.finds = []; // Fossilienfunde: { id, name, fee, value, status: 'found' | 'recovering', sellAt }
     this.jobs = []; // Zusatzaufträge der Gemeinde: { id, status: 'offer' | 'active', place, zone, bonus, offerExpiresAt, dueAt, progress }
     this.extraSeq = 0;
@@ -178,13 +180,65 @@ export class Game {
   startDrone(win) { return new DroneSim(this.lake, this.stats, win); }
 
   // Drohnenflug abrechnen: Pauschale für den Einsatz, Befliegungsdaten werden an die Behörde verkauft, Funde gemeldet
+  // Gesamtbewertung eines Kastens (16 Spalten x box.rows ab Zeile r0): Anteil abgenommener Zellen, Übertiefung, Qualität 0..1
+  evaluateBox(x0, r0) {
+    const L = this.lake, C = CONFIG.cert; let n = 0, ok = 0, deep = 0, fresh = 0;
+    for (let y = r0; y < r0 + CONFIG.box.rows; y++) for (let x = x0; x < x0 + 16; x++) {
+      const i = L.idx(x, y);
+      if (!L.initial[i]) continue;
+      n++; if (L.accepted[i]) ok++;
+      if (L.target[i] - L.top[i] > CONFIG.layer.tolerance) deep++;
+      if (!L.certified[i]) fresh++;
+    }
+    const fraction = n ? ok / n : 0, deepShare = n ? deep / n : 0;
+    const quality = Math.max(0, Math.min(1, (fraction - C.minFraction) / (1 - C.minFraction))) * (1 - deepShare);
+    return { n, ok, fraction, deepShare, quality, fresh, passed: n > 0 && fraction >= C.minFraction && fresh >= C.minNewCells };
+  }
+
+  // Zertifikat ausstellen, wenn der Kasten die Mindestquote erreicht und nicht schon zertifiziert ist
+  issueCert(x0, r0, box = this.evaluateBox(x0, r0)) {
+    if (!box.passed || this.status !== 'playing') return null;
+    const C = CONFIG.cert, L = this.lake;
+    for (let y = r0; y < r0 + CONFIG.box.rows; y++) for (let x = x0; x < x0 + 16; x++) { const i = L.idx(x, y); if (L.initial[i]) L.certified[i] = 1; }
+    const id = ++this.certSeq;
+    const cert = {
+      id, serial: `ZK-${String(id).padStart(4, '0')}`, x0, r0, rows: CONFIG.box.rows, cols: 16, cells: box.n, fraction: box.fraction, quality: box.quality,
+      grade: box.quality >= C.gold ? 'Gold' : box.quality >= C.silver ? 'Silber' : 'Bronze', day: this.day,
+      premium: Math.round((box.fresh * C.perCell * (1 + C.maxBonus * box.quality)) / 10) * 10, status: 'issued', approveAt: 0,
+    };
+    this.certs.push(cert);
+    this.say(`Abnahmezertifikat ${cert.serial} (${cert.grade}) ausgestellt: ${Math.round(box.fraction * 100)} % der Zellen sauber.`, 'good');
+    return cert;
+  }
+
+  // Beim Kanton einreichen: kostet eine Gebühr, nach cert.days Tagen kommt die Freigabe mit Prämie
+  submitCert(id) {
+    const c = this.certs.find((x) => x.id === id && x.status === 'issued');
+    if (!c || this.status !== 'playing' || this.money < CONFIG.cert.fee) return false;
+    this.money -= CONFIG.cert.fee; this.totals.certFees += CONFIG.cert.fee;
+    c.status = 'submitted'; c.approveAt = this.time + CONFIG.cert.days * CONFIG.daySeconds;
+    this.say(`${c.serial} beim Kanton eingereicht (−${CONFIG.cert.fee} CHF). Bearbeitung: ${CONFIG.cert.days} Tage.`, 'info');
+    return true;
+  }
+
+  _certs() {
+    for (const c of this.certs) {
+      if (c.status !== 'submitted' || this.time < c.approveAt) continue;
+      c.status = 'approved'; this.money += c.premium; this.totals.certPaid += c.premium; this.totals.certsApproved++;
+      const msg = `Kanton gibt ${c.serial} frei: Prämie +${c.premium} CHF (${c.grade}).`;
+      this.say(msg, 'good'); this.notify(msg, 'good');
+    }
+  }
+
   finishDrone(sim) {
     const doc = sim.docCells * CONFIG.drone.docPerCell;
     this.money += doc - CONFIG.drone.fee;
     this.totals.docPaid += doc;
     this.say(`Drohne: ${sim.newlyAccepted} Zellen abgenommen, ${sim.newlyFlagged} mit Restschmutz gemeldet. Einsatz −${CONFIG.drone.fee} CHF${doc ? `, Befliegungsdaten +${doc} CHF` : ''}`, sim.newlyFlagged ? 'bad' : 'good');
     for (const idx of sim.found) this.addFind(idx);
-    return { accepted: sim.newlyAccepted, flagged: sim.newlyFlagged, found: sim.found.length, doc };
+    const box = this.evaluateBox(sim.x0, sim.r0);
+    const cert = this.issueCert(sim.x0, sim.r0, box);
+    return { accepted: sim.newlyAccepted, flagged: sim.newlyFlagged, found: sim.found.length, doc, box, cert };
   }
 
   // ---------- Fossilienfunde ----------
@@ -286,6 +340,7 @@ export class Game {
     this.time += dt;
     this._plant(dt);
     this._claims();
+    this._certs();
     this._finds();
     this._jobs(dt);
     const day = Math.floor(this.time / CONFIG.daySeconds) + 1;

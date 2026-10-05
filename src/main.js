@@ -114,9 +114,57 @@ function updatePlant() {
 }
 
 // ---------- Nachträge ----------
+let certSig = null;
+function certHtml(c) {
+  const when = (c.x0 + 1) + '–' + (c.x0 + c.cols), rows = (c.r0 + 1) + '–' + (c.r0 + c.rows);
+  return `<div class="cert grade-${c.grade}">
+    <div class="cert-seal">${c.grade === 'Gold' ? '🥇' : c.grade === 'Silber' ? '🥈' : '🥉'}</div>
+    <small>Kantonales Amt für Seeputz (frei erfunden)</small>
+    <h2>Abnahmezertifikat</h2>
+    <p class="serial">Nr. ${c.serial} · ausgestellt an Tag ${c.day}</p>
+    <p>Für den Kasten <b>Spalten ${when}, Zeilen ${rows}</b> (${c.cells} bestellte Zellen) wird bestätigt:<br>
+    <b>${Math.round(c.fraction * 100)} %</b> der Zellen sind laut Tauchdrohne sauber abgetragen.</p>
+    <p class="gradeline">Güteklasse <b>${c.grade}</b> · Prämie bei Freigabe <b>${chf(c.premium)}</b></p>
+    <p class="sign">gez. die Drohne <i>(Unterschrift: Blubb)</i></p>
+  </div>`;
+}
+function showCert(c) {
+  const open = c.status === 'issued';
+  showOverlay(`${certHtml(c)}
+    ${open ? `<button class="primary" id="cert-submit">Beim Kanton einreichen (−${CONFIG.cert.fee} CHF, ${CONFIG.cert.days} Tage Bearbeitung)</button>` : `<p><small>${c.status === 'submitted' ? 'Eingereicht, der Kanton prüft noch.' : 'Freigegeben und ausbezahlt.'}</small></p>`}
+    <button id="cert-close">${open ? 'Später' : 'Schliessen'}</button>`);
+  if (open) $('cert-submit').onclick = () => { if (game.submitCert(c.id)) { hideOverlay(); updatePanel(); toast(`${c.serial} eingereicht`, 'good'); } else toast('Zu wenig Geld für die Gebühr', 'bad'); };
+  $('cert-close').onclick = hideOverlay;
+}
+function updateCerts() {
+  const sig = game.certs.map((c) => `${c.id}:${c.status}`).join(',');
+  const days = (t) => Math.max(0, Math.ceil((t - game.time) / CONFIG.daySeconds));
+  if (sig !== certSig) {
+    certSig = sig;
+    const rows = game.certs.map((c) => {
+      const row = document.createElement('div'); row.className = `claim ${c.status}`;
+      const title = document.createElement('b'); title.textContent = `${c.serial} · ${c.grade} · ${Math.round(c.fraction * 100)} %`;
+      const info = document.createElement('small'); info.dataset.cert = c.id;
+      const line = document.createElement('div'); line.className = 'row';
+      const view = document.createElement('button'); view.textContent = 'Ansehen'; view.onclick = () => showCert(c);
+      line.append(view);
+      if (c.status === 'issued') { const go = document.createElement('button'); go.textContent = `Einreichen (−${CONFIG.cert.fee} CHF)`; go.onclick = () => { if (game.submitCert(c.id)) updatePanel(); }; line.append(go); }
+      row.append(title, info, line);
+      return row;
+    });
+    if (!rows.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = `Wenn die Drohne in einem Kasten ${Math.round(CONFIG.cert.minFraction * 100)} % der Zellen abnimmt, gibt es ein Zertifikat für den Kanton. Bessere Qualität = höhere Prämie.`; rows.push(e); }
+    $('certs').replaceChildren(...rows);
+  }
+  for (const c of game.certs) {
+    const el = document.querySelector(`[data-cert="${c.id}"]`); if (!el) continue;
+    el.textContent = c.status === 'issued' ? `Prämie bei Freigabe ${chf(c.premium)} · noch nicht eingereicht`
+      : c.status === 'submitted' ? `Beim Kanton, Freigabe in ${days(c.approveAt)} Tagen (Prämie ${chf(c.premium)})` : `Freigegeben, Prämie ${chf(c.premium)} erhalten`;
+  }
+}
 let claimSig = null; // null = noch nie aufgebaut
 const claimRefs = {};
 function updateClaims() {
+  updateCerts();
   const sig = game.claims.map((c) => `${c.id}:${c.status}`).join(',');
   const days = (t) => Math.max(0, Math.ceil((t - game.time) / CONFIG.daySeconds));
   if (sig !== claimSig) { // nur neu aufbauen, wenn sich die Liste ändert (Regler bleiben beim Ziehen stabil)
@@ -406,7 +454,10 @@ function endDrone() {
   drone = null;
   syncMode();
   const extra = `${r.found ? `, ${r.found} Fund${r.found > 1 ? 'e' : ''}` : ''}${r.doc ? `, Befliegungsdaten +${chf(r.doc)}` : ''}`;
-  toast(r.flagged ? `Drohne: ${r.accepted} Zellen abgenommen, ${r.flagged} mit Restschmutz (rot markiert)${extra}` : `Drohne: ${r.accepted} Zellen abgenommen, nichts zu beanstanden${extra}`, r.flagged ? 'bad' : 'good');
+  const pc = Math.round(r.box.fraction * 100), need = Math.round(CONFIG.cert.minFraction * 100);
+  if (r.cert) { toast(`Kasten ${pc} % sauber: Zertifikat ${r.cert.serial} (${r.cert.grade})!`, 'good'); showCert(r.cert); return; }
+  const certNote = r.box.n && r.box.fraction >= CONFIG.cert.minFraction ? ' (Kasten schon zertifiziert)' : r.box.n ? ` · Kasten ${pc} % sauber, ${need} % nötig für ein Zertifikat` : '';
+  toast(r.flagged ? `Drohne: ${r.accepted} Zellen abgenommen, ${r.flagged} mit Restschmutz (rot markiert)${extra}${certNote}` : `Drohne: ${r.accepted} Zellen abgenommen, nichts zu beanstanden${extra}${certNote}`, r.flagged ? 'bad' : 'good');
 }
 
 // ---------- Spielende ----------
@@ -421,7 +472,7 @@ function showEnd() {
     <p>Endstand: <b>${chf(e.finalMoney)}</b>${record ? ' <b class="good">Neuer Rekord!</b>' : best !== null ? `<br><small>Rekord: ${chf(best)}</small>` : ''}</p>
     <p><small>Vergütung insgesamt +${chf(t.pay)} · Nachträge +${chf(t.claimsPaid)} (${t.claimsAccepted} genehmigt, ${t.claimsPartial} hälftig, ${t.claimsRejected} abgelehnt, ${t.claimsExpired} verjährt)<br>${e.external ? `Fremdfirma für den Rest −${chf(e.external)}<br>` : ''}
     Abgesaugt ${t.removed.toFixed(0)} m³ · Chargen ${Object.entries(t.classes).map(([k, n]) => `${n}× ${k}`).join(', ')}<br>
-    Befliegungsdaten +${chf(t.docPaid)} · Fossilien +${chf(t.findsPaid)} (${t.findsSold} verkauft, ${t.fossilsLost} zerstört) · Gemeinde-Aufträge +${chf(t.jobsPaid)} (${t.jobsDone} erledigt, ${t.jobsFailed} verpasst)<br>
+    Befliegungsdaten +${chf(t.docPaid)} · Zertifikate +${chf(t.certPaid)} (${t.certsApproved} freigegeben) · Fossilien +${chf(t.findsPaid)} (${t.findsSold} verkauft, ${t.fossilsLost} zerstört) · Gemeinde-Aufträge +${chf(t.jobsPaid)} (${t.jobsDone} erledigt, ${t.jobsFailed} verpasst)<br>
     Entsorgung ${chf(t.disposalPaid)} · Bussen ${chf(t.finesPaid)} · Bergungen ${chf(t.repairsPaid)} · Übertiefung ${chf(t.overdigPaid)}</small></p>
     <p>Gewonnen hat, wer am Ende am meisten Geld hat.</p>
     <button class="primary" id="btn-restart">Neues Spiel</button>`);
@@ -432,7 +483,7 @@ function restart(loaded = null) {
   game = loaded instanceof Game ? loaded : new Game(); sim = game.createSession(); drone = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
-  setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null;
+  setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null; certSig = null;
   hideOverlay(); syncMode(); updatePanel();
   if (!loaded || loaded instanceof Event) clearSave(); else saveGame();
 }

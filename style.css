@@ -195,3 +195,15 @@ body.touch #btn-anchor { display: none; } /* auf dem Handy wirft der grosse Knop
 .rowchip.deep { background: linear-gradient(to top, #8a5a2a var(--p, 0%), #24415c var(--p, 0%)); }
 @media (max-width: 860px) and (orientation: portrait) { #row-box { flex: 1 1 100%; justify-content: center; } .rowchip { flex: 1; max-width: 56px; height: 40px; } }
 @media (max-width: 860px) and (orientation: portrait) and (max-height: 720px) { .rowchip { height: 32px; } #shift-actions button { min-height: 32px; } }
+
+/* Abnahmezertifikat */
+.cert { position: relative; background: #f4ecd2; color: #2c2415; border: 3px double #8a6d2f; border-radius: 6px; padding: 18px 16px 14px; text-align: center; margin-bottom: 10px; }
+.cert h2 { color: #5a4310; text-transform: none; letter-spacing: 0; font-size: 24px; margin: 4px 0; font-family: Georgia, serif; }
+.cert small { color: #7a6a45; }
+.cert p { margin: 6px 0; }
+.cert .serial { font-family: ui-monospace, monospace; font-size: 13px; color: #6f5d33; }
+.cert .gradeline b { color: #8a5a00; }
+.cert .sign { font-style: italic; margin-top: 12px; color: #4a3d1e; }
+.cert-seal { position: absolute; top: 8px; right: 12px; font-size: 40px; transform: rotate(12deg); filter: drop-shadow(0 2px 2px #0006); }
+.cert.grade-Gold { border-color: #c79a1a; box-shadow: 0 0 18px #e6b82e66; }
+.cert.grade-Silber { border-color: #9aa2ab; }

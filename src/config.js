@@ -53,6 +53,9 @@ export const CONFIG = {
     { zone: 0.16, hits: 3, speed: 1.2, clog: 9 }, // Stossstange: sperrig
     { zone: 0.18, hits: 3, speed: 1.0, clog: 8 }, // Kinderwagen: Nerven
   ],
+  // Abnahmezertifikat je Kasten: ab minFraction abgenommener Zellen stellt die Drohne eins aus; eingereicht wird es 'days' Tage
+  // geprüft, dann kommt die Prämie. Sie steigt mit der Qualität (Anteil sauberer Zellen über der Mindestquote, abzüglich Übertiefung).
+  cert: { minFraction: 0.9, minNewCells: 10, fee: 300, days: 3, perCell: 60, maxBonus: 1.0, gold: 0.8, silver: 0.4 },
   refundShare: 0.75, // beim Rückbau einer Ausbaustufe gibt es so viel der Investition zurück
   unclog: { hits: 2, zone: 0.24, speed: 1.1, speedUp: 1.4, missPenalty: 1.0 },
   // Automatik: Stufe 0 = Handbetrieb, 1 = experimentell, 2 = zuverlässig, 3 = voll
