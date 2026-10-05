@@ -777,7 +777,7 @@ function frame(now) {
       }
       if (sim.mode === 'slice') {
         const m = sliceMouthScreen(sim.slice), load = Math.min(1, d.removed / Math.max(1e-6, sim.stats.power * dt));
-        fx.feed(m, sliceY(sim.slice.surfaceAt(sim.slice.mouth().x)), d, dt, 0);
+        fx.feed(m, sliceY(sim.slice.surfaceAt(sim.slice.mouth().x)), d, dt, Math.max(0, game.money - before)); // grüne +Zahlen an der Pumpe
         audio.hum(sim.pumpOn && sim.slice.suctioning, load);
       }
       if (sim.mode === 'slice') {

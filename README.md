@@ -125,4 +125,4 @@ Nach dem Ankerwerfen ist der Pumpenschlauch verdreht: 3 Knoten (`CONFIG.hose`). 
 ## Bildgrösse am Handy und Meldungen
 
 - Im Hochformat füllt das Bild immer die ganze Breite (kein schwarzer Rand mehr neben dem Bild). Ist oben und unten zu wenig Platz, wird das Bild beschnitten und der Ausschnitt folgt Pumpe, Haken oder Schlauch senkrecht; ist Platz übrig, wird der Querschnitt gezoomt und folgt der Pumpe seitlich.
-- Meldungen sind selten und kurz: nur Warnungen und Ergebnisse (eine auf einmal, 2 Sekunden); alles andere steht im Journal. Geld-Änderungen erscheinen kurz als +/- statt der Einkommensangabe in der Kopfzeile, nicht mehr als Zahlen im Bild.
+- Meldungen sind selten und kurz: nur Warnungen und Ergebnisse (eine auf einmal, 2 Sekunden); alles andere steht im Journal. Geld-Änderungen erscheinen kurz als +/- statt der Einkommensangabe in der Kopfzeile; die grünen +Zahlen an der Pumpe bleiben.
