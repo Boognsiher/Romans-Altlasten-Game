@@ -290,7 +290,7 @@ function fitCanvas() {
     below += el.offsetHeight + (el.id === 'touch-ui' ? 0 : parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); // touch-ui hat margin-top:auto (Restplatz), der zählt nicht
   }
   const docTop = canvas.getBoundingClientRect().top + scrollY;
-  const availH = Math.max(220, innerHeight - docTop - below - (narrow() ? 64 : 16));
+  const availH = Math.max(narrow() ? 90 : 220, innerHeight - docTop - below - (narrow() ? 64 : 16));
   let { w, h } = fitSize(stage.clientWidth, availH, lw, lh);
   // Handy hochkant, Querschnitt: der freie Platz geht in einen Zoom; das Bild folgt der Pumpe seitlich (panCanvas)
   zoom = 1;

@@ -175,3 +175,12 @@ body.touch #btn-anchor { display: none; } /* auf dem Handy wirft der grosse Knop
 .upbtns .sell:disabled { opacity: .35; }
 .up > div:first-child { flex: 1 1 auto; min-width: 0; }
 .upbtns { flex: none; }
+
+/* Hochformat: Tempo- und Abtragsregler teilen sich eine Zeile, die Knöpfe laufen einzeilig (seitlich wischbar), damit die Steuerung unten nie abgeschnitten wird */
+@media (max-width: 860px) and (orientation: portrait) {
+  #shift-actions { flex-wrap: wrap; }
+  #shift-actions button { flex: 1 0 auto; white-space: nowrap; min-height: 36px; }
+  #spd-box, #cut-box { flex: 1 1 45%; min-width: 0; padding: 2px 8px; font-size: 12px; }
+  #spd-box input, #cut-box input { width: 100%; min-width: 50px; flex: 1; }
+  #spd-box small, #cut-box small { display: none; }
+}
