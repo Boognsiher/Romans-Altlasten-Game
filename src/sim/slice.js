@@ -38,6 +38,7 @@ export class SliceSim {
     this.tipped = 0; // Sekunden, bis die umgekippte Pumpe wieder steht
     this.overNote = 0; // Sperrzeit für die Übertiefungs-Meldung
     this.clog = 0; // Sekunden Zwangspause wegen Fremdstoff
+    this.freeing = null; // Freispül-Minispiel: { pos, dir, speed, zoneC, hits, need }
     this.auto = { on: false, dir: 'sweep', error: null, errLeft: 0 };
     this.notes = []; // Meldungen für die Oberfläche: { kind, text }
   }
@@ -45,6 +46,25 @@ export class SliceSim {
   // h = tatsächliche Höhe, setH = eingestellte Höhe (Kettenlänge). Wer h direkt setzt, stellt auch die Kette ein.
   get h() { return this._h; }
   set h(v) { this._h = v; this.setH = v; }
+
+  // Freispülen: Marker pendelt von 0 nach 1 und zurück; ein Versuch trifft, wenn er in der Zone liegt
+  _startFreeing() {
+    const U = CONFIG.unclog;
+    this.freeing = { pos: 0, dir: 1, speed: U.speed, zoneC: this._zone(), hits: 0, need: U.hits };
+  }
+  _zone() { const half = CONFIG.unclog.zone / 2; return half + this.rng() * (1 - 2 * half); }
+  freeAttempt() {
+    const f = this.freeing, U = CONFIG.unclog;
+    if (!f || this.clog <= 0) return null;
+    if (Math.abs(f.pos - f.zoneC) <= U.zone / 2) {
+      f.hits++;
+      if (f.hits >= f.need) { this.clog = 0; this.freeing = null; this.say('good', 'Pfropfen gelöst! Die Pumpe spuckt den Fremdstoff aus.'); return 'cleared'; }
+      f.speed *= U.speedUp; f.zoneC = this._zone();
+      return 'hit';
+    }
+    this.clog += U.missPenalty;
+    return 'miss';
+  }
 
   say(kind, text, extra = {}) { this.notes.push({ kind, text, ...extra }); }
 
@@ -156,6 +176,11 @@ export class SliceSim {
     }
     const clogged = this.clog > 0;
     if (clogged) this.clog = Math.max(0, this.clog - dt);
+    if (this.freeing) {
+      const f = this.freeing;
+      if (this.clog <= 0) this.freeing = null;
+      else { f.pos += f.dir * f.speed * dt; if (f.pos >= 1) { f.pos = 1; f.dir = -1; } else if (f.pos <= 0) { f.pos = 0; f.dir = 1; } }
+    }
 
     let dx = ctl.dx || 0, dy = ctl.dy || 0;
     if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0;
@@ -202,6 +227,7 @@ export class SliceSim {
     if (d && m.h <= this.surfaceAt(m.x) + 1.5) {
       this.lake.debris[di] = 0;
       this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : CONFIG.debris.clogSeconds;
+      if (!a.on) this._startFreeing(); // von Hand: Minispiel
       this.suctioning = false;
       this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`, { item: DEBRIS[d - 1] });
       return ZERO;

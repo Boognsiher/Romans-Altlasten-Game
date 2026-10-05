@@ -69,6 +69,7 @@ export class DredgeSim {
     if (this.slice) this.slice.speedSetting = this.pumpSpeed;
   }
 
+  freeAttempt() { return this.mode === 'slice' ? this.slice.freeAttempt() : null; }
   toggleAuto() { return this.mode === 'slice' && this.slice.toggleAuto(); }
   fixAuto() { return this.mode === 'slice' && this.slice.fixAuto(); }
 

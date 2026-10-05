@@ -39,7 +39,9 @@ export const CONFIG = {
   // Harte Schichten: Absaugleistung dort geteilt durch (1 + Härte * factor) -> mehrere Überfahrten
   hard: { blobs: 7, factor: 1.5 },
   // Fremdstoffe verstopfen die Pumpe (Sekunden Zwangspause, Fremdstoff ist danach weg)
-  debris: { count: 28, clogSeconds: 3 },
+  debris: { count: 28, clogSeconds: 6 }, // ohne Eingreifen so lange verstopft; das Freispül-Minispiel verkürzt es
+  // Freispülen (Minispiel bei Verstopfung, nur Handbetrieb): Marker pendelt über den Balken, im grünen Bereich auslösen.
+  unclog: { hits: 2, zone: 0.24, speed: 1.1, speedUp: 1.4, missPenalty: 1.0 },
   // Automatik: Stufe 0 = Handbetrieb, 1 = experimentell, 2 = zuverlässig, 3 = voll
   auto: {
     speedFactor: [1, 0.8, 1, 1.25],

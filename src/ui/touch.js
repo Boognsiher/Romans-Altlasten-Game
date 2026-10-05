@@ -64,10 +64,10 @@ export function setupTouch(input, hooks) {
 
   return {
     // Pumpenzustand auf dem grossen Knopf anzeigen (nur im Querschnitt)
-    setPump(on) {
+    setPump(on, clogged = false) {
       if (mode !== 'slice') return;
-      act.textContent = on ? '🌀 Pumpe AN' : '🌀 Pumpe AUS';
-      act.classList.toggle('held', on);
+      act.textContent = clogged ? '🔧 Freispülen!' : on ? '🌀 Pumpe AN' : '🌀 Pumpe AUS';
+      act.classList.toggle('held', on && !clogged);
     },
     setMode(m) {
       if (m === mode) return;

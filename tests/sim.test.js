@@ -1168,3 +1168,45 @@ test('Effekte: harte Schicht und Verstopfung lassen den Bildschirm wackeln, Teil
   for (let i = 0; i < 200; i++) fx.update(0.016);
   assert.equal(fx.shake, 0);
 });
+
+test('Freispülen: bei Verstopfung von Hand startet das Minispiel, Treffer lösen den Pfropfen, Fehlversuche kosten Zeit', () => {
+  const g = new Game(5);
+  const sim = g.createSession();
+  g.lake.setFlat(5); sim.anchor();
+  const sl = sim.slice;
+  assert.equal(sl.freeAttempt(), null); // nichts verstopft
+  sl.clog = CONFIG.debris.clogSeconds; sl._startFreeing();
+  const f = sl.freeing;
+  f.pos = 0; f.zoneC = 0.8; // weit weg
+  const t = sl.clog;
+  assert.equal(sl.freeAttempt(), 'miss');
+  assert.ok(sl.clog > t);
+  f.pos = f.zoneC; assert.equal(sl.freeAttempt(), 'hit');
+  assert.ok(sl.freeing.speed > CONFIG.unclog.speed); // wird schneller
+  sl.freeing.pos = sl.freeing.zoneC; assert.equal(sl.freeAttempt(), 'cleared');
+  assert.equal(sl.clog, 0); assert.equal(sl.freeing, null);
+});
+
+test('Freispülen: Marker pendelt im Balken, und ohne Eingreifen löst sich die Verstopfung nach der Wartezeit', () => {
+  const g = new Game(5);
+  const sim = g.createSession();
+  g.lake.setFlat(5); sim.anchor();
+  const sl = sim.slice;
+  sl.clog = 2; sl._startFreeing();
+  for (let i = 0; i < 10; i++) { sl.update(0.1, { dx: 0, dy: 0, suction: false }); assert.ok(sl.freeing.pos >= 0 && sl.freeing.pos <= 1); }
+  for (let i = 0; i < 20; i++) sl.update(0.1, { dx: 0, dy: 0, suction: false });
+  assert.equal(sl.clog, 0); assert.equal(sl.freeing, null);
+});
+
+test('Freispülen: die Automatik spielt das Minispiel nicht', () => {
+  const g = new Game(5);
+  g.levels.autoLevel = 2;
+  const sim = g.createSession();
+  g.lake.setFlat(5); sim.anchor();
+  const sl = sim.slice; sl.stats = g.stats;
+  sl.lake.debris[sl.lake.idx(Math.floor(sl.mouth().x), sl.row)] = 1;
+  sl.h = sl.surfaceAt(sl.x) + 0.35; sl.auto.on = true;
+  sl.update(0.1, { dx: 0, dy: 0, suction: true });
+  assert.ok(sl.clog > 0, 'Automatik hat sich verstopft');
+  assert.equal(sl.freeing, null);
+});

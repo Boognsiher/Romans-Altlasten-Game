@@ -33,6 +33,7 @@ export function createAudio() {
     clog() { blip(180, 0.25, 'sawtooth', 0.18, -120); },
     tip() { blip(220, 0.7, 'sawtooth', 0.22, -170); },
     pay() { blip(880, 0.08, 'triangle', 0.06, 300); },
+    free(r) { if (r === 'miss') blip(150, 0.15, 'sawtooth', 0.12, -60); else if (r === 'hit') blip(520, 0.1, 'triangle', 0.1, 260); else { blip(660, 0.12, 'triangle', 0.12, 330); setTimeout(() => blip(990, 0.2, 'triangle', 0.12, 200), 110); } },
     toggle(on) { blip(on ? 300 : 500, 0.12, 'square', 0.08, on ? 200 : -200); },
     get muted() { return muted; },
     setMuted(m) { muted = m; try { localStorage.setItem('altlasten.mute', m ? '1' : '0'); } catch { /* egal */ } if (m) gain?.gain.setTargetAtTime(0, ac.currentTime, 0.05); },

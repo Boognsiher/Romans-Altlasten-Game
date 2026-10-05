@@ -66,3 +66,7 @@ Das Spiel speichert automatisch im Browser (`localStorage`, Schlüssel `altlaste
 ## Abbau-Gefühl (Effekte)
 
 Im Querschnitt fliegt abgesaugtes Material (braun, hart = grau, Altlast = orange) in den Saugmund, Vergütungen schweben als "+CHF" hoch, harte Schichten und Verstopfungen lassen das Bild wackeln (Brocken fliegen weg, am Handy vibriert es kurz), und das Profil wird weich gezeichnet. Die Pumpe brummt, Tonhöhe und Lautstärke folgen der Last; Ton lässt sich mit M oder dem Ton-Knopf abschalten. Code: `src/ui/fx.js`, `src/ui/audio.js`.
+
+## Minispiel: Pumpe freispülen
+
+Verstopft von Hand ein Fremdstoff die Pumpe, startet das Freispülen: ein Marker pendelt über einen Balken, mit Leertaste (bzw. dem grossen Knopf am Handy) im grünen Bereich auslösen. Zwei Treffer lösen den Pfropfen sofort, jeder Treffer macht den Marker schneller; ein Fehlversuch verlängert die Verstopfung um 1 s. Wer nichts tut, wartet 6 s. Die Automatik spielt das Minispiel nicht (feste Wartezeit je Stufe). Werte: `CONFIG.unclog`, `CONFIG.debris.clogSeconds`.

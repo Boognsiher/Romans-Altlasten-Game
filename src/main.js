@@ -314,7 +314,16 @@ function anchor() { if (!drone && sim.anchor()) syncMode(); }
 function leave() { if (!drone && sim.leave()) syncMode(); }
 function toggleAuto() { if (!drone) sim.toggleAuto(); }
 function toggleSound() { audio.setMuted(!audio.muted); $('btn-sound').textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
-function togglePump() { if (!drone && sim.togglePump()) audio.toggle(sim.pumpOn); }
+function togglePump() {
+  if (drone) return;
+  if (sim.mode === 'slice' && sim.slice.freeing) { // verstopft: der Knopf löst das Freispül-Minispiel aus
+    const r = sim.freeAttempt();
+    if (r) { audio.free(r); fx.burst(sliceMouthScreen(sim.slice).x, sliceMouthScreen(sim.slice).y, r === 'cleared' ? 24 : r === 'hit' ? 8 : 4, r === 'miss' ? 'dust' : 'hard', r === 'cleared' ? 220 : 120); }
+    if (r === 'cleared') { fx.shake = 0; toast('Pfropfen gelöst!', 'good'); }
+    return;
+  }
+  if (sim.togglePump()) audio.toggle(sim.pumpOn);
+}
 function fixAuto() { if (!drone) sim.fixAuto(); }
 function setCut(v) {
   sim.setCutDepth(v);
@@ -480,9 +489,9 @@ function frame(now) {
         $('btn-auto').hidden = sim.stats.autoLevel <= 0;
         $('btn-auto').textContent = sl.auto.on ? '🤖 Automatik aus (T)' : '🤖 Automatik an (T)';
         $('btn-fix').hidden = !sl.auto.error;
-        $('btn-pump').textContent = sim.pumpOn ? '🌀 Pumpe: AN (Leertaste)' : '🌀 Pumpe: AUS (Leertaste)';
+        $('btn-pump').textContent = sl.freeing ? '🔧 Freispülen! (Leertaste)' : sim.pumpOn ? '🌀 Pumpe: AN (Leertaste)' : '🌀 Pumpe: AUS (Leertaste)';
         $('btn-pump').classList.toggle('on', sim.pumpOn);
-        touch?.setPump(sim.pumpOn);
+        touch?.setPump(sim.pumpOn, !!sl.freeing);
         $('spd-box').hidden = false;
         if (document.activeElement !== $('spd')) { $('spd').value = sim.pumpSpeed; $('spd-val').textContent = pct(sim.pumpSpeed); }
         $('cut-box').hidden = sim.stats.echolot <= 0;
