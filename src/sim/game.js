@@ -67,6 +67,18 @@ export class Game {
     return true;
   }
 
+  // Rückbau: die zuletzt gekaufte Stufe wird verkauft, CONFIG.refundShare der damaligen Kosten kommen zurück
+  refundFor(id) { return this.levels[id] <= 0 ? null : Math.round((upgradeCost(id, this.levels[id] - 1) * CONFIG.refundShare) / 10) * 10; }
+
+  sellUpgrade(id) {
+    const refund = this.refundFor(id);
+    if (refund === null || this.status !== 'playing') return false;
+    this.levels[id]--;
+    this.money += refund;
+    this.say(`${UPGRADES[id].name} auf Stufe ${this.levels[id]} zurückgebaut (+${refund} CHF)`, 'upgrade');
+    return true;
+  }
+
   createSession() {
     const sim = new DredgeSim(this.lake, this.stats, this.rng);
     sim.cutDepth = this.cutDepth;

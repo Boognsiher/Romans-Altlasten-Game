@@ -4,8 +4,8 @@ import { createRng } from '../src/sim/rng.js';
 import { Lake } from '../src/sim/lake.js';
 import { Game } from '../src/sim/game.js';
 import { DredgeSim } from '../src/sim/dredge.js';
-import { CONFIG } from '../src/config.js';
-import { computeStats } from '../src/sim/stats.js';
+import { CONFIG, DEBRIS } from '../src/config.js';
+import { computeStats, upgradeCost } from '../src/sim/stats.js';
 import { Chain } from '../src/ui/chain.js';
 import { acceptChance, decide, claimedAmount, clampMarkup } from '../src/sim/claims.js';
 import { fitSize, renderQuality } from '../src/ui/layout.js';
@@ -1222,4 +1222,33 @@ test('Passwort: SHA-256 stimmt mit Node überein, Prüfung ignoriert Leerzeichen
   assert.ok(!checkPassword('uetikon2026', CONFIG.passwordHash));
   assert.ok(!checkPassword('', CONFIG.passwordHash));
   assert.notEqual(hashPassword('a'), hashPassword('b'));
+});
+
+test('Rückbau: 75 % der Investition kommen zurück, die Stufe sinkt, bei Stufe 0 geht nichts', () => {
+  const g = new Game(8);
+  g.money = 1e6;
+  assert.equal(g.refundFor('power'), null);
+  assert.equal(g.sellUpgrade('power'), false);
+  g.buyUpgrade('power'); g.buyUpgrade('power');
+  const cost2 = upgradeCost('power', 1), m = g.money;
+  assert.equal(g.sellUpgrade('power'), true);
+  assert.equal(g.levels.power, 1);
+  assert.ok(Math.abs(g.money - m - cost2 * CONFIG.refundShare) <= 5);
+  assert.ok(g.sellUpgrade('power')); assert.equal(g.levels.power, 0);
+  assert.equal(g.sellUpgrade('power'), false);
+  g.status = 'ended'; g.levels.power = 1; assert.equal(g.sellUpgrade('power'), false);
+});
+
+test('Fremdstoffe: jeder hat eigene Schwierigkeit im Freispülen', () => {
+  assert.equal(CONFIG.debrisInfo.length, DEBRIS.length);
+  const g = new Game(5), sim = g.createSession();
+  g.lake.setFlat(5); sim.anchor();
+  const sl = sim.slice;
+  sl._startFreeing(DEBRIS.indexOf('Stossstange'));
+  assert.equal(sl.freeing.need, 3); assert.equal(sl.freeing.item, 'Stossstange');
+  assert.ok(sl.freeing.zone < CONFIG.unclog.zone);
+  sl._startFreeing(DEBRIS.indexOf('Fischerhut von 1987'));
+  assert.equal(sl.freeing.need, 1); assert.ok(sl.freeing.zone > CONFIG.unclog.zone);
+  // Zone liegt immer vollständig im Balken
+  for (let i = 0; i < 50; i++) { const f = sl.freeing; f.zoneC = sl._zone(f); assert.ok(f.zoneC - f.zone / 2 >= -1e-9 && f.zoneC + f.zone / 2 <= 1 + 1e-9); }
 });

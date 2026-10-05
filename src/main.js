@@ -61,13 +61,28 @@ function buildUpgrades() {
       const small = document.createElement('small');
       label.append(def.name + ' ', small);
       const btn = document.createElement('button');
-      btn.onclick = () => { if (game.buyUpgrade(id)) { sim.setStats(game.stats); updatePanel(); } };
-      row.append(label, btn);
-      upRows[id] = { small, btn };
+      btn.onclick = () => { if (game.buyUpgrade(id)) { applyStats(); updatePanel(); } };
+      const sell = document.createElement('button'); // Rückbau: zweiter Tipp bestätigt
+      sell.className = 'sell';
+      let armed = 0;
+      sell.onclick = () => {
+        if (!armed) { armed = setTimeout(() => { armed = 0; updateUpgrades(); }, 3000); sell.textContent = 'Sicher?'; return; }
+        clearTimeout(armed); armed = 0;
+        if (game.sellUpgrade(id)) { applyStats(); updatePanel(); }
+      };
+      const btns = document.createElement('div'); btns.className = 'upbtns'; btns.append(sell, btn);
+      row.append(label, btns);
+      upRows[id] = { small, btn, sell, armed: () => armed };
       nodes.push(row);
     }
   }
   $('upgrades').replaceChildren(...nodes);
+}
+
+// Nach Kauf oder Rückbau: neue Werte an den Ponton, Abhängiges abschalten
+function applyStats() {
+  sim.setStats(game.stats);
+  if (sim.mode === 'slice' && game.stats.autoLevel <= 0 && sim.slice.auto.on) { sim.slice.auto.on = false; sim.slice.auto.error = null; }
 }
 
 function updateUpgrades() {
@@ -76,6 +91,11 @@ function updateUpgrades() {
     r.small.textContent = `Stufe ${game.levels[id]}/${def.maxLevel} · ${def.desc}`;
     r.btn.textContent = cost === null ? 'Max' : chf(cost);
     r.btn.disabled = cost === null || game.money < cost || game.status !== 'playing';
+    const refund = game.refundFor(id);
+    if (!r.armed()) r.sell.textContent = '↩';
+    if (refund !== null) r.small.textContent += ` · Rückbau +${chf(refund)}`;
+    r.sell.disabled = refund === null || game.status !== 'playing';
+    r.sell.title = `Rückbau: ${Math.round(CONFIG.refundShare * 100)}% der Investition kommen zurück`;
   }
 }
 

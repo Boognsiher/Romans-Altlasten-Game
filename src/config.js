@@ -43,6 +43,17 @@ export const CONFIG = {
   // Fremdstoffe verstopfen die Pumpe (Sekunden Zwangspause, Fremdstoff ist danach weg)
   debris: { count: 28, clogSeconds: 6 }, // ohne Eingreifen so lange verstopft; das Freispül-Minispiel verkürzt es
   // Freispülen (Minispiel bei Verstopfung, nur Handbetrieb): Marker pendelt über den Balken, im grünen Bereich auslösen.
+  // Fremdstoffe unterscheiden sich im Freispülen: Breite des grünen Bereichs, nötige Treffer, Starttempo und Wartezeit ohne Eingreifen (s). Reihenfolge wie DEBRIS.
+  debrisInfo: [
+    { zone: 0.24, hits: 2, speed: 1.1, clog: 6 }, // Einkaufswagen
+    { zone: 0.22, hits: 2, speed: 1.2, clog: 6 }, // Velo
+    { zone: 0.34, hits: 1, speed: 1.0, clog: 4 }, // Gartenzwerg: harmlos
+    { zone: 0.20, hits: 2, speed: 1.3, clog: 7 }, // Bürostuhl: Rollen verheddern sich
+    { zone: 0.42, hits: 1, speed: 0.9, clog: 3 }, // Fischerhut von 1987: weich
+    { zone: 0.16, hits: 3, speed: 1.2, clog: 9 }, // Stossstange: sperrig
+    { zone: 0.18, hits: 3, speed: 1.0, clog: 8 }, // Kinderwagen: Nerven
+  ],
+  refundShare: 0.75, // beim Rückbau einer Ausbaustufe gibt es so viel der Investition zurück
   unclog: { hits: 2, zone: 0.24, speed: 1.1, speedUp: 1.4, missPenalty: 1.0 },
   // Automatik: Stufe 0 = Handbetrieb, 1 = experimentell, 2 = zuverlässig, 3 = voll
   auto: {

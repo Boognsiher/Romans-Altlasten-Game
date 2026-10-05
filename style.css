@@ -167,3 +167,11 @@ body.touch #btn-anchor { display: none; } /* auf dem Handy wirft der grosse Knop
   #touch-ui { padding-bottom: 58px; }
   #act { height: 80px; }
 }
+
+/* Rückbau-Knopf neben dem Kaufen-Knopf */
+.upbtns { display: flex; gap: 6px; align-items: stretch; }
+.upbtns button { margin: 0; }
+.upbtns .sell { background: #3a2f2f; font-size: 14px; white-space: nowrap; min-width: 40px; padding: 6px 8px; }
+.upbtns .sell:disabled { opacity: .35; }
+.up > div:first-child { flex: 1 1 auto; min-width: 0; }
+.upbtns { flex: none; }

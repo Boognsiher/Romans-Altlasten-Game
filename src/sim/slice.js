@@ -48,15 +48,18 @@ export class SliceSim {
   set h(v) { this._h = v; this.setH = v; }
 
   // Freispülen: Marker pendelt von 0 nach 1 und zurück; ein Versuch trifft, wenn er in der Zone liegt
-  _startFreeing() {
-    const U = CONFIG.unclog;
-    this.freeing = { pos: 0, dir: 1, speed: U.speed, zoneC: this._zone(), hits: 0, need: U.hits };
+  // idx = Index in DEBRIS (0-basiert): jeder Fremdstoff hat eigene Zonenbreite, Trefferzahl und Tempo
+  _startFreeing(idx) {
+    const U = CONFIG.unclog, info = CONFIG.debrisInfo[idx] ?? {};
+    const f = { pos: 0, dir: 1, speed: info.speed ?? U.speed, zone: info.zone ?? U.zone, hits: 0, need: info.hits ?? U.hits, item: DEBRIS[idx] ?? null };
+    this.freeing = f;
+    f.zoneC = this._zone(f);
   }
-  _zone() { const half = CONFIG.unclog.zone / 2; return half + this.rng() * (1 - 2 * half); }
+  _zone(f = this.freeing) { const half = (f?.zone ?? CONFIG.unclog.zone) / 2; return half + this.rng() * (1 - 2 * half); }
   freeAttempt() {
     const f = this.freeing, U = CONFIG.unclog;
     if (!f || this.clog <= 0) return null;
-    if (Math.abs(f.pos - f.zoneC) <= U.zone / 2) {
+    if (Math.abs(f.pos - f.zoneC) <= f.zone / 2) {
       f.hits++;
       if (f.hits >= f.need) { this.clog = 0; this.freeing = null; this.say('good', 'Pfropfen gelöst! Die Pumpe spuckt den Fremdstoff aus.'); return 'cleared'; }
       f.speed *= U.speedUp; f.zoneC = this._zone();
@@ -226,8 +229,8 @@ export class SliceSim {
     const d = di === undefined ? 0 : this.lake.debris[di];
     if (d && m.h <= this.surfaceAt(m.x) + 1.5) {
       this.lake.debris[di] = 0;
-      this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : CONFIG.debris.clogSeconds;
-      if (!a.on) this._startFreeing(); // von Hand: Minispiel
+      this.clog = a.on ? CONFIG.auto.clogSeconds[lvl] : (CONFIG.debrisInfo[d - 1]?.clog ?? CONFIG.debris.clogSeconds);
+      if (!a.on) this._startFreeing(d - 1); // von Hand: Minispiel
       this.suctioning = false;
       this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`, { item: DEBRIS[d - 1] });
       return ZERO;

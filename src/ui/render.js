@@ -311,13 +311,13 @@ export function drawSlice(ctx, lake, sim) {
     ctx.fillText(sl.tipped > 0 ? 'UMGEKIPPT!' : 'Schieflage', Math.max(8, pump.x - 40), Math.max(96, bodyTop - 8));
   }
   if (sl.freeing && sl.clog > 0) { // Freispül-Minispiel: im grünen Bereich auslösen
-    const f = sl.freeing, bw = 260, bx = Math.min(W - bw / 2 - 12, Math.max(bw / 2 + 12, pump.x)) - bw / 2, by = Math.max(SLICE_TOP + 70, bodyTop - 70), zw = CONFIG.unclog.zone * bw;
+    const f = sl.freeing, bw = 260, bx = Math.min(W - bw / 2 - 12, Math.max(bw / 2 + 12, pump.x)) - bw / 2, by = Math.max(SLICE_TOP + 70, bodyTop - 70), zw = f.zone * bw;
     ctx.fillStyle = '#000b'; ctx.fillRect(bx - 8, by - 12, bw + 16, 66);
     ctx.fillStyle = '#33414c'; ctx.fillRect(bx, by + 16, bw, 14);
     ctx.fillStyle = '#7bd88f'; ctx.fillRect(bx + f.zoneC * bw - zw / 2, by + 16, zw, 14);
     ctx.fillStyle = '#fff'; ctx.fillRect(bx + f.pos * bw - 2, by + 10, 4, 26);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(`Freispülen! ${'●'.repeat(f.hits)}${'○'.repeat(f.need - f.hits)}  ${sl.clog.toFixed(1)}s`, bx + bw / 2, by + 8);
+    ctx.fillText(`${f.item ?? 'Freispülen'}! ${'●'.repeat(f.hits)}${'○'.repeat(f.need - f.hits)}  ${sl.clog.toFixed(1)}s`, bx + bw / 2, by + 8);
     ctx.fillStyle = '#ffffffbb'; ctx.fillText('im grünen Bereich: Leertaste / Knopf', bx + bw / 2, by + 48); ctx.textAlign = 'start';
   }
   if (sl.clog > 0 && !sl.freeing) {

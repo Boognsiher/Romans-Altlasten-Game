@@ -74,3 +74,8 @@ Verstopft von Hand ein Fremdstoff die Pumpe, startet das Freispülen: ein Marker
 ## Startpasswort
 
 Beim ersten Öffnen fragt das Spiel nach einem Passwort (`CONFIG.passwordHash`, nur der SHA-256-Hash steht im Code). Nach der Eingabe merkt sich der Browser das auf diesem Gerät. Ändern: `node tools/set-password.mjs <Passwort>` (ohne Argument entfernt es die Abfrage). Wichtig: Das ist eine reine Browser-Schranke. Der Code ist öffentlich lesbar, ein Entschlossener kommt also vorbei. Sie hält nur Neugierige ab.
+
+## Rückbau und Fremdstoffe
+
+- **Rückbau:** Neben jedem Ausbau steht ein ↩-Knopf (zweiter Tipp bestätigt). Er verkauft die zuletzt gekaufte Stufe und gibt `CONFIG.refundShare` (75 %) ihrer damaligen Kosten zurück; die Kosten für den Rückbau stehen in der Beschreibung.
+- **Fremdstoffe:** Jeder hat im Freispülen eine eigene Schwierigkeit (`CONFIG.debrisInfo`): Fischerhut und Gartenzwerg sind leicht (breites Grün, ein Treffer), Stossstange und Kinderwagen schwer (schmal, drei Treffer, lange Wartezeit); im Balken steht der Name des Fremdstoffs.
