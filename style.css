@@ -141,3 +141,24 @@ body.touch #btn-anchor { display: none; } /* auf dem Handy wirft der grosse Knop
   body.touch #cut-box { top: 118px; }
   #touch-ui { bottom: 4px; }
 }
+
+/* Handy hochkant: feste Aufteilung ohne Scrollen. Oben das Spiel (mit HUD im Bild), darunter die Bedienung,
+   alles Weitere steckt im eingeklappten Panel am unteren Rand. */
+@media (max-width: 860px) and (orientation: portrait) {
+  html, body { height: 100dvh; overflow: hidden; }
+  body { display: flex; flex-direction: column; padding-bottom: 0; }
+  header { padding: 6px 12px; flex: none; }
+  header h1 { display: none; }
+  #hud { font-size: 12px; gap: 2px 10px; }
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 6px 8px 0; gap: 0; }
+  #stage { flex: 1; min-height: 0; min-width: 0; width: 100%; display: flex; flex-direction: column; overflow: visible; }
+  #stage > canvas { flex: none; max-width: 100%; }
+  #hints { display: none; }
+  #shift-hud { position: absolute; top: 4px; left: 4px; right: 56px; background: #000a; border-radius: 6px; padding: 2px 8px; font-size: 11px; gap: 2px 10px; z-index: 2; }
+  #shift-hud progress { width: 52px; }
+  #shift-actions { flex: none; gap: 6px; margin: 6px 0 0; }
+  #shift-actions button { padding: 6px 8px; font-size: 12px; flex: 1 1 28%; width: auto; min-height: 40px; line-height: 1.2; }
+  #spd-box, #cut-box { flex: 1 1 100%; }
+  #touch-ui { position: static; flex: none; margin-top: auto; padding: 8px 4px 64px; gap: 12px; }
+  #touch-ui > * { opacity: 1; }
+}
