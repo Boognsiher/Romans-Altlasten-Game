@@ -33,6 +33,10 @@ const SAVE_KEY = 'altlasten.save';
 const readSave = () => { try { return localStorage.getItem(SAVE_KEY); } catch { return null; } };
 const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch { /* egal */ } };
 let saveClock = 0, savedDay = 0;
+// Kauf, Rückbau, Nachtrag, Zertifikat usw. ändern diese Signatur: dann wird sofort (nach höchstens einer halben Sekunde) gespeichert,
+// auch bei geöffnetem Panel oder in der Pause; so geht beim Neuladen nichts verloren, was man eben erst gekauft hat
+let stateSig = null, stateSigTimer = 0;
+const gameSig = () => JSON.stringify([game.levels, game.claims.map((c) => c.status), game.certs.map((c) => c.status), game.finds.map((f) => f.status), game.jobs.map((j) => j.status), game.craneOffer?.id, game.cutDepth, game.pumpSpeed, game.overclock]);
 function saveGame() {
   if (game.status !== 'playing' || overlayOpen()) return; // solange das Startbild offen ist, bleibt der alte Stand unangetastet
   try { localStorage.setItem(SAVE_KEY, serializeGame(game)); savedDay = game.day; saveClock = 0; } catch { /* Speicher voll oder gesperrt: egal */ }
@@ -601,7 +605,7 @@ function restart(loaded = null) {
   sizeMap(canvas, game.lake); shownSize = 'map';
   setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null; certSig = null;
   hideOverlay(); syncMode(); updatePanel();
-  closeBruno(); advisor = new Advisor(loadMuted()); advisor.enabled = brunoOn();
+  stateSig = null; closeBruno(); advisor = new Advisor(loadMuted()); advisor.enabled = brunoOn();
   applyLevel();
   if (!(loaded instanceof Game)) { clearSave(); toast(game.level.blurb, 'info'); } else saveGame();
 }
@@ -648,7 +652,7 @@ function frame(now) {
   if (readInput.tap('KeyM')) toggleSound();
   if (running) {
     saveClock += dt;
-    if (game.day !== savedDay || saveClock > 20) saveGame();
+    if (game.day !== savedDay || saveClock > 10) saveGame();
     if (drone) {
       if (readInput.tap('Escape', 'KeyQ')) recall();
       // Die Drohne bleibt in der Bildmitte: Maus/Finger steuern relativ zur Mitte, Tasten und Stick in beide Achsen
@@ -747,6 +751,12 @@ function frame(now) {
   }
   readInput.endFrame();
 
+  stateSigTimer += dt;
+  if (stateSigTimer > 0.5) {
+    stateSigTimer = 0;
+    const sig = gameSig();
+    if (sig !== stateSig) { if (stateSig !== null) saveGame(); stateSig = sig; }
+  }
   panelTimer += dt;
   if (panelTimer > 0.25) { panelTimer = 0; updatePanel(); }
   updateHud();
@@ -825,6 +835,7 @@ function showGate() {
 }
 if (!CONFIG.passwordHash || unlocked()) showIntro(); else showGate();
 addEventListener('pagehide', saveGame);
+addEventListener('beforeunload', saveGame);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
 requestAnimationFrame(frame);
 globalThis.__dbg = () => ({ game, sim, drone, crane, mapTarget }); // nur für Browser-Tests
