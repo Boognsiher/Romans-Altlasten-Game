@@ -238,7 +238,8 @@ export class SliceSim {
     this.moving = Math.abs(dx) + Math.abs(dy) > 0.01;
 
     const along = dx * SLICE.work.x + dy * SLICE.work.y; // >0: in Arbeitsrichtung
-    const working = !!ctl.suction && !clogged && !this.blocked && along > -0.05; // Pumpe an: saugt auch im Stillstand, nur rückwärts nicht
+    const pumpOk = !a.on || input.pumpOn !== false; // läuft die Automatik, entscheidet der Pumpenschalter über das Saugen
+    const working = !!ctl.suction && pumpOk && !clogged && !this.blocked && along > -0.05; // Pumpe an: saugt auch im Stillstand, nur rückwärts nicht
     const af = a.on ? CONFIG.auto.speedFactor[lvl] : 1;
     const speed = s.headSpeed * this.speedSetting * af * (working ? s.suctionSpeedFactor : along < -0.05 ? SLICE.returnBoost : 1);
 

@@ -1394,3 +1394,28 @@ test('Bruno: Tipps nach Lage (voller Puffer, zu tief, viel Geld), mit Abstand, S
   adv = new Advisor(); const g2 = new Game(98), s2 = g2.createSession(); g2.time = 0; adv.observe(CONFIG.advisor.firstAfter + 1, d0, g2, s2);
   assert.equal(adv.pick(g2, s2).id, 'start'); adv.lastShown = -Infinity; assert.notEqual(adv.pick(g2, s2)?.id, 'start');
 });
+
+test('Automatik: sie schaltet die Pumpe ein, ein manuelles Ausschalten gilt (sie fährt weiter, saugt aber nicht), nach dem Ende ist die Pumpe wieder aus', () => {
+  const g = new Game(99); g.lake.setFlat(1, 3); g.levels.auto = 3; g.levels.echolot = 2; g.cutDepth = 1.0;
+  const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor();
+  const sl = sim.slice; sl.x = sl.x0 + 1; sl.h = sl.surfaceAt(sl.x) + 0.4;
+  assert.equal(sim.pumpOn, false);
+  sim.toggleAuto();
+  assert.equal(sim.pumpOn, true, 'Automatik schaltet die Pumpe ein');
+  let removed = 0; const x1 = sl.x;
+  for (let i = 0; i < 40; i++) removed += sim.update(0.05, {}).removed;
+  assert.ok(removed > 0);
+  sim.togglePump(); // von Hand aus
+  assert.equal(sim.pumpOn, false);
+  removed = 0; const x2 = sl.x;
+  for (let i = 0; i < 40; i++) removed += sim.update(0.05, {}).removed;
+  assert.equal(removed, 0, 'Pumpe aus: nichts abgesaugt');
+  assert.ok(sl.x > x2 && sl.auto.on, 'Automatik fährt weiter');
+  sim.togglePump(); // wieder an
+  removed = 0; for (let i = 0; i < 40; i++) removed += sim.update(0.05, {}).removed;
+  assert.ok(removed > 0);
+  // Ende: Fenster ab Startpunkt sauber -> Automatik aus, Pumpe aus
+  for (let t = 0; t < 1500 && sl.auto.on; t += 0.05) { sim.update(0.05, {}); }
+  assert.equal(sl.auto.on, false); assert.equal(sim.pumpOn, false);
+  assert.ok(x1 > 0);
+});

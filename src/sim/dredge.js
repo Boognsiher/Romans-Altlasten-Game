@@ -48,7 +48,7 @@ export class DredgeSim {
     if (this.mode !== 'slice') return false;
     this.slice = null;
     this.mode = 'map';
-    this.pumpOn = false;
+    this.pumpOn = false; this.autoStartedPump = false;
     return true;
   }
 
@@ -70,7 +70,12 @@ export class DredgeSim {
   }
 
   freeAttempt() { return this.mode === 'slice' ? this.slice.freeAttempt() : null; }
-  toggleAuto() { return this.mode === 'slice' && this.slice.toggleAuto(); }
+  // Die Automatik schaltet die Pumpe mit ein; wer die Pumpe danach von Hand ausschaltet, hat das letzte Wort (die Automatik fährt weiter, saugt aber nicht)
+  toggleAuto() {
+    if (this.mode !== 'slice' || !this.slice.toggleAuto()) return false;
+    if (this.slice.auto.on && !this.pumpOn) { this.pumpOn = true; this.autoStartedPump = true; }
+    return true;
+  }
   fixAuto() { return this.mode === 'slice' && this.slice.fixAuto(); }
 
   // input: { dx, dy in -1..1, suction: bool }
@@ -87,7 +92,8 @@ export class DredgeSim {
       this.y = clamp(this.y + dy * s.speed * dt, 0, this.lake.rows);
     } else {
       this.slice.blocked = this.bufferFull; // Puffer voll: auch die Automatik darf nicht saugen
-      const r = this.slice.update(dt, { ...input, suction: input.suction || this.pumpOn });
+      const r = this.slice.update(dt, { ...input, suction: input.suction || this.pumpOn, pumpOn: this.pumpOn });
+      if (this.autoStartedPump && !this.slice.auto.on) { this.pumpOn = false; this.autoStartedPump = false; } // Automatik fertig oder übernommen: die von ihr eingeschaltete Pumpe geht wieder aus
       for (const n of this.slice.notes.splice(0)) {
         this.notes.push(n);
         if (n.kind === 'clog') { d.clogs++; d.clogItems.push(n.item); }
