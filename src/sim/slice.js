@@ -145,6 +145,7 @@ export class SliceSim {
     this.auto.on = !this.auto.on;
     this.auto.error = null;
     this.auto.startX = this.x; // ab hier, nicht ab dem Anfang des Fensters
+    this.auto.didWork = false;
     this.auto.dir = 'sweep';
     if (this.auto.on && this.stats.echolot > 0) { // vor dem Abtrag neu loten
       this.sound();
@@ -162,14 +163,23 @@ export class SliceSim {
   }
 
   // Ist Zeile k des Kastens am Sollwert (mit Echolot) bzw. sauber (ohne)?
+  // Spalte c der Zeile k des Kastens noch offen? (mit Echolot: über der Zielhöhe; ohne: noch Restschicht)
+  _colOpen(c, k) {
+    const i = this.lake.idx(this.x0 + c, this.rows[k]);
+    if (!this.lake.initial[i]) return false;
+    return this.sounding ? this.lake.top[i] > this.targetAt(c, k) + CONFIG.echolot.doneEps : this.lake.mass[i] >= 0.05 / SLICE.cols;
+  }
+
+  // Ist Zeile k ab dem Startpunkt der Automatik fertig?
   _rowDone(k) {
-    const r = this.rows[k];
-    for (let c = this.autoFromCol(); c < SLICE.cols; c++) {
-      const i = this.lake.idx(this.x0 + c, r);
-      if (!this.lake.initial[i]) continue;
-      if (this.sounding ? this.lake.top[i] > this.targetAt(c, k) + CONFIG.echolot.doneEps : this.lake.mass[i] >= 0.05 / SLICE.cols) return false;
-    }
+    for (let c = this.autoFromCol(); c < SLICE.cols; c++) if (this._colOpen(c, k)) return false;
     return true;
+  }
+
+  // Erste offene Spalte links vom Startpunkt in der gewählten Zeile, sonst -1
+  _openColLeft() {
+    for (let c = 0; c < this.autoFromCol(); c++) if (this._colOpen(c, this.ci)) return c;
+    return -1;
   }
 
   _nextOpenRow() {
@@ -215,8 +225,13 @@ export class SliceSim {
       const manual = Math.abs(input.dx || 0) > 0.2 || Math.abs(input.dy || 0) > 0.2;
       if (manual) { a.on = false; a.error = null; this.say('info', 'Du übernimmst das Steuer.'); }
       else if (this.sounding ? this.allDone() : this.windowRemaining() < 0.05) {
-        const next = lvl >= 3 ? this._nextOpenRow() : -1; // Vollautomatik macht mit der nächsten offenen Zeile weiter
-        if (next >= 0) { this.selectRow(next); this.say('info', `Zeile fertig. Automatik wechselt zu Zeile ${next + 1}.`); ctl = this._autoControl(dt); }
+        const left = a.didWork ? -1 : this._openColLeft(); // gab es ab dem Startpunkt von Anfang an nichts zu tun, aber links ist etwas offen: dorthin springen, statt sich sofort abzuschalten
+        const next = left < 0 && lvl >= 3 ? this._nextOpenRow() : -1; // Vollautomatik macht mit der nächsten offenen Zeile weiter
+        if (left >= 0) {
+          a.startX = Math.max(this.x0 + 0.01, this.x0 + left - CONFIG.pump.offsetX + 0.01); a.dir = 'return';
+          this.say('info', 'Ab hier ist alles fertig. Automatik fährt zur nächsten offenen Stelle.');
+          ctl = this._autoControl(dt);
+        } else if (next >= 0) { this.selectRow(next); this.say('info', `Zeile fertig. Automatik wechselt zu Zeile ${next + 1}.`); ctl = this._autoControl(dt); }
         else {
           a.on = false;
           this.say('good', this.sounding ? 'Zeile auf Sollwert. Echolot meldet: passt.' : 'Zeile sauber. Automatik meldet Feierabend.');
@@ -263,6 +278,7 @@ export class SliceSim {
     // zu hoch (über eingestellter Höhe, vom Gelände angehoben): die Pumpe hängt schief an der Kette
     const lift = Math.max(0, this._h - this.setH - P.liftTolerance), liftGain = lift * P.liftTiltRate * dt;
 
+    if (a.on && working) a.didWork = true;
     this.suctioning = working;
     if (!this.suctioning) {
       if (liftGain > 0) this.tilt += liftGain; else this.tilt = Math.max(0, this.tilt - P.tiltRecover * dt);

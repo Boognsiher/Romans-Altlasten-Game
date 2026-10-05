@@ -1471,3 +1471,17 @@ test('Kran: die Laufkatze erreicht den Transportkahn', () => {
   assert.ok(c.tx >= 13.5 && c.tx <= CRANE.deckX1 - 0.3 + 1.2);
   assert.ok(c.hookX > CRANE.deckX0, 'Haken über dem Kahn');
 });
+
+test('Automatik schaltet sich nicht sofort ab, wenn es ab dem Startpunkt nichts zu tun gibt, aber links noch etwas offen ist', () => {
+  const g = new Game(100); g.lake.setFlat(1, 3); g.levels.auto = 3;
+  const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor();
+  const sl = sim.slice;
+  // rechte Hälfte der Zeile ist schon fertig
+  for (let c = 8; c < 16; c++) for (const r of sl.rows) { const i = g.lake.idx(sl.x0 + c, r); g.lake.top[i] = g.lake.target[i]; g.lake.mass[i] = 0; }
+  sl.x = sl.x0 + 12; sl.h = sl.surfaceAt(sl.x) + 0.4; sim.toggleAuto();
+  for (let i = 0; i < 20; i++) sim.update(0.05, {});
+  assert.equal(sl.auto.on, true, 'Automatik läuft weiter');
+  for (let t = 0; t < 2500 && sl.auto.on; t += 0.05) sim.update(0.05, {});
+  assert.equal(sl.auto.on, false);
+  for (const r of sl.rows) for (let c = 0; c < 16; c++) assert.ok(g.lake.mass[g.lake.idx(sl.x0 + c, r)] < CONFIG.drone.acceptMax, `Zeile ${r} Spalte ${c}`);
+});
