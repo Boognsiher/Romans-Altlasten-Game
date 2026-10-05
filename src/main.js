@@ -8,6 +8,7 @@ import { steerToward } from './ui/touch-logic.js';
 import { fitSize, renderQuality } from './ui/layout.js';
 import { hintsFor } from './ui/hints.js';
 import { Fx } from './ui/fx.js';
+import { Advisor } from './sim/advisor.js';
 import { checkPassword } from './ui/gate.js';
 import { createAudio } from './ui/audio.js';
 import { serializeGame, restoreGame, savedSummary } from './sim/save.js';
@@ -37,6 +38,14 @@ function saveGame() {
   try { localStorage.setItem(SAVE_KEY, serializeGame(game)); savedDay = game.day; saveClock = 0; } catch { /* Speicher voll oder gesperrt: egal */ }
 }
 
+// Bauleiter Bruno: Tipps (Gag); Ein/Aus und stummgeschaltete Tipps merkt sich der Browser
+const BRUNO_KEY = 'altlasten.bruno', MUTE_KEY = 'altlasten.bruno.muted';
+const brunoOn = () => { try { return localStorage.getItem(BRUNO_KEY) !== '0'; } catch { return true; } };
+const loadMuted = () => { try { return JSON.parse(localStorage.getItem(MUTE_KEY) ?? '[]'); } catch { return []; } };
+const saveMuted = (a) => { try { localStorage.setItem(MUTE_KEY, JSON.stringify([...a])); } catch { /* egal */ } };
+let advisor = new Advisor(loadMuted());
+advisor.enabled = brunoOn();
+let brunoOpen = false, brunoTimer = 0;
 const fx = new Fx();
 const audio = createAudio();
 let game = new Game();
@@ -421,6 +430,39 @@ function updateRows() {
     b.title = st.done ? 'sauber' : `${Math.round(prog * 100)}% abgetragen${st.deep ? `, ${st.deep} Zellen zu tief` : ''}`;
   });
 }
+const BRUNO_SVG = `<svg viewBox="0 0 100 100" width="84" height="84" aria-hidden="true">
+  <circle cx="50" cy="60" r="29" fill="#f3c9a0" stroke="#7a5a3a" stroke-width="2"/>
+  <path d="M17 52 A33 33 0 0 1 83 52 Z" fill="#ffcc1a" stroke="#b58900" stroke-width="2"/>
+  <rect x="45" y="17" width="10" height="35" rx="3" fill="#ffb800" stroke="#b58900" stroke-width="1.5"/>
+  <rect x="10" y="50" width="80" height="9" rx="4.5" fill="#ffd84d" stroke="#b58900" stroke-width="2"/>
+  <circle cx="39" cy="68" r="5.5" fill="#fff" stroke="#444"/><circle cx="61" cy="68" r="5.5" fill="#fff" stroke="#444"/>
+  <circle cx="40" cy="69" r="2.6" fill="#222"/><circle cx="62" cy="69" r="2.6" fill="#222"/>
+  <path d="M32 61 L45 63 M68 61 L55 63" stroke="#6b4a2a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M35 80 Q50 72 65 80 Q58 85 50 82 Q42 85 35 80Z" fill="#6b4a2a"/>
+  <path d="M42 87 Q50 91 58 87" stroke="#7a3b2a" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`;
+function closeBruno() { brunoOpen = false; $('bruno').hidden = true; $('bruno').innerHTML = ''; }
+function showBruno(tip) {
+  brunoOpen = true;
+  const box = $('bruno');
+  box.innerHTML = `<div class="bruno-row"><div class="bruno-head">${BRUNO_SVG}<small>Bauleiter Bruno</small></div>
+    <div class="bruno-bubble"><p></p><div class="bruno-btns"></div><div class="bruno-links"></div></div></div>`;
+  box.querySelector('p').textContent = tip.text;
+  const btns = box.querySelector('.bruno-btns'), links = box.querySelector('.bruno-links');
+  const mk = (parent, text, fn, cls = '') => { const b = document.createElement('button'); b.textContent = text; if (cls) b.className = cls; b.onclick = fn; parent.append(b); return b; };
+  if (tip.upgrade) {
+    const u = UPGRADES[tip.upgrade.id];
+    mk(btns, `${u.name} kaufen (${chf(tip.upgrade.cost)})`, () => { if (game.buyUpgrade(tip.upgrade.id)) { applyStats(); updatePanel(); toast(`${u.name} gekauft. Bruno ist stolz auf dich.`, 'good'); } closeBruno(); }, 'primary');
+  }
+  mk(btns, 'Danke, Bruno', closeBruno);
+  mk(links, 'Diesen Tipp nie mehr', () => { advisor.mute(tip.id); saveMuted(advisor.muted); closeBruno(); });
+  mk(links, 'Bruno ausschalten', () => { setBruno(false); closeBruno(); });
+  box.hidden = false;
+}
+function setBruno(on) {
+  advisor.enabled = on; $('chk-bruno').checked = on;
+  try { localStorage.setItem(BRUNO_KEY, on ? '1' : '0'); } catch { /* egal */ }
+  if (!on) closeBruno();
+}
 function togglePump() {
   if (drone) return;
   if (sim.mode === 'slice' && sim.slice.freeing) { // verstopft: der Knopf löst das Freispül-Minispiel aus
@@ -521,6 +563,7 @@ function restart(loaded = null) {
   sizeMap(canvas, game.lake); shownSize = 'map';
   setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null; certSig = null;
   hideOverlay(); syncMode(); updatePanel();
+  closeBruno(); advisor = new Advisor(loadMuted()); advisor.enabled = brunoOn();
   applyLevel();
   if (!(loaded instanceof Game)) { clearSave(); toast(game.level.blurb, 'info'); } else saveGame();
 }
@@ -529,6 +572,8 @@ $('btn-drone').onclick = startDrone;
 $('btn-drone2').onclick = startDrone;
 $('btn-recall').onclick = recall;
 $('btn-pump').onclick = togglePump;
+$('chk-bruno').checked = advisor.enabled;
+$('chk-bruno').onchange = (e) => setBruno(e.target.checked);
 $('btn-sound').onclick = toggleSound; $('btn-sound2').onclick = toggleSound;
 for (const id of ['btn-sound', 'btn-sound2']) $(id).textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)';
 $('btn-pause').onclick = togglePause;
@@ -557,7 +602,8 @@ let last = performance.now(), panelTimer = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (readInput.tap('KeyP')) togglePause();
-  const running = !paused && !sheetOpen && !overlayOpen() && game.status === 'playing';
+  if (readInput.tap('KeyB') && !overlayOpen()) setBruno(!advisor.enabled);
+  const running = !paused && !sheetOpen && !overlayOpen() && !brunoOpen && game.status === 'playing'; // solange Bruno spricht, ist Pause
   touch?.setMode(currentMode());
 
   if (!running) audio.hum(false, 0);
@@ -606,6 +652,7 @@ function frame(now) {
       sim.bufferRoom = game.bufferRoom;
       const before = game.money, d = sim.update(dt, inp);
       game.collect(d);
+      advisor.observe(dt, d, game, sim);
       for (const n of sim.notes.splice(0)) {
         toast(n.text, n.kind);
         if (sim.mode === 'slice' && (n.kind === 'clog' || n.kind === 'tip')) { // Brocken fliegen, Wackeln, Ton, Vibration
@@ -640,6 +687,11 @@ function frame(now) {
     }
     fx.update(dt);
     game.update(dt);
+    brunoTimer += dt;
+    if (brunoTimer > 1) { // höchstens einmal pro Sekunde prüfen; nicht mitten im Minispiel oder Drohnenflug
+      brunoTimer = 0;
+      if (advisor.enabled && !drone && !(sim.mode === 'slice' && (sim.slice.freeing || sim.slice.tipped > 0))) { const tip = advisor.pick(game, sim); if (tip) showBruno(tip); }
+    }
     for (const n of game.notes.splice(0)) toast(n.text, n.kind);
   }
   readInput.endFrame();

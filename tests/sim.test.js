@@ -1361,3 +1361,36 @@ test('Zeichnen: Karte (mit Auftrag), Querschnitt (mit Verstopfung, Zertifikat-Sp
   }
   view.s = 1;
 });
+
+import { Advisor } from '../src/sim/advisor.js';
+
+test('Bruno: Tipps nach Lage (voller Puffer, zu tief, viel Geld), mit Abstand, Stummschaltung und Ausschalter', () => {
+  const g = new Game(97), sim = g.createSession(); g.lake.setFlat(5); sim.anchor();
+  const d0 = { overdug: 0, tips: 0, clogs: 0 };
+  const run = (adv, secs, d = d0) => { for (let i = 0; i < secs; i++) { g.time += 1; adv.observe(1, d, g, sim); } };
+  // nichts los: kein Tipp (ausser dem Start-Tipp, solange nichts abgesaugt wurde)
+  let adv = new Advisor(); g.money = 5000; g.totals.removed = 10; run(adv, 100);
+  assert.equal(adv.pick(g, sim), null);
+  // Puffer voll -> Tipp mit Kaufknopf für Entwässerung
+  sim.bufferRoom = 0; run(adv, 60);
+  const t1 = adv.pick(g, sim);
+  assert.equal(t1.id, 'buffer'); assert.ok(t1.upgrade === null || ['plant', 'dewater'].includes(t1.upgrade.id));
+  assert.equal(adv.pick(g, sim), null, 'Mindestabstand');
+  run(adv, CONFIG.advisor.gap + 1);
+  assert.notEqual(adv.pick(g, sim)?.id, 'buffer', 'derselbe Tipp erst nach Wartezeit');
+  // viel Geld -> Empfehlung
+  adv = new Advisor(); sim.bufferRoom = 100; g.money = 80000; g.totals.removed = 10; run(adv, 100);
+  const rich = adv.pick(g, sim); assert.equal(rich.id, 'rich'); assert.ok(rich.upgrade && rich.upgrade.cost <= g.money);
+  // zu tief ohne Echolot -> Echolot-Empfehlung
+  adv = new Advisor(); g.money = 20000; run(adv, 100, { overdug: 2, tips: 0, clogs: 0 });
+  const over = adv.pick(g, sim); assert.equal(over.id, 'overdig'); assert.equal(over.upgrade?.id, 'echolot');
+  // Umkippen
+  adv = new Advisor(); g.money = 20000; run(adv, 10, { overdug: 0, tips: 1, clogs: 0 });
+  assert.equal(adv.pick(g, sim).id, 'tipover');
+  // stummschalten und ausschalten
+  adv = new Advisor(['rich']); g.money = 80000; run(adv, 100); assert.notEqual(adv.pick(g, sim)?.id, 'rich');
+  adv = new Advisor(); adv.enabled = false; g.money = 80000; run(adv, 100); assert.equal(adv.pick(g, sim), null);
+  // Start-Tipp nur einmal, nur am Anfang
+  adv = new Advisor(); const g2 = new Game(98), s2 = g2.createSession(); g2.time = 0; adv.observe(CONFIG.advisor.firstAfter + 1, d0, g2, s2);
+  assert.equal(adv.pick(g2, s2).id, 'start'); adv.lastShown = -Infinity; assert.notEqual(adv.pick(g2, s2)?.id, 'start');
+});

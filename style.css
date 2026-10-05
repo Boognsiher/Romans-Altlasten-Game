@@ -246,3 +246,21 @@ button.level.locked { opacity: .5; }
 }
 #h-buf.warn { color: var(--bad); }
 button#btn-sound2 { width: 100%; margin-top: 6px; }
+
+/* Bauleiter Bruno (Tipps, Spiel pausiert) */
+#bruno { position: fixed; inset: 0; z-index: 26; display: flex; align-items: flex-end; justify-content: center; padding: 0 10px 72px; background: #0006; }
+#bruno[hidden] { display: none; }
+.bruno-row { display: flex; gap: 10px; align-items: flex-end; max-width: 560px; width: 100%; animation: brunoIn .25s ease-out; }
+.bruno-head { flex: none; text-align: center; animation: brunoBob 2.4s ease-in-out infinite; }
+.bruno-head small { display: block; color: #ffd84d; font-weight: 700; font-size: 11px; margin-top: -4px; }
+.bruno-bubble { position: relative; flex: 1; background: #fffbe8; color: #2c2415; border: 2px solid #b58900; border-radius: 16px; padding: 12px 14px; box-shadow: 0 6px 20px #000a; }
+.bruno-bubble::before { content: ''; position: absolute; left: -12px; bottom: 28px; border: 8px solid transparent; border-right: 12px solid #b58900; border-left: 0; }
+.bruno-bubble::after { content: ''; position: absolute; left: -8px; bottom: 30px; border: 6px solid transparent; border-right: 10px solid #fffbe8; border-left: 0; }
+.bruno-bubble p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
+.bruno-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.bruno-btns button { margin: 0; flex: 1 1 auto; }
+.bruno-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; }
+.bruno-links button { background: none; border: 0; color: #6f5d33; text-decoration: underline; padding: 4px 0; font-size: 13px; min-height: 0; width: auto; margin: 0; }
+@keyframes brunoIn { from { transform: translateY(20px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes brunoBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-4px) rotate(2deg); } }
+@media (max-width: 860px) { .bruno-bubble p { font-size: 15px; } }

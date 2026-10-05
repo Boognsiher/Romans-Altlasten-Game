@@ -56,6 +56,9 @@ export const CONFIG = {
   // Abnahmezertifikat je Kasten: ab minFraction abgenommener Zellen stellt die Drohne eins aus; eingereicht wird es 'days' Tage
   // geprüft, dann kommt die Prämie. Sie steigt mit der Qualität (Anteil sauberer Zellen über der Mindestquote, abzüglich Übertiefung).
   cert: { minFraction: 0.9, minNewCells: 10, fee: 300, days: 3, perCell: 60, maxBonus: 1.0, gold: 0.8, silver: 0.4 },
+  // Bauleiter Bruno (Tipps): firstAfter = Sekunden bis zum ersten Tipp, gap = Mindestabstand zwischen Tipps, tipCooldown = derselbe Tipp frühestens wieder nach,
+  // tau/eventWindow = Glättung und Fenster der Messwerte, Schwellen = ab wann etwas als 'immer' gilt
+  advisor: { firstAfter: 20, gap: 55, tipCooldown: 240, tau: 30, eventWindow: 120, bufferFull: 0.45, turbidity: 0.55, overRate: 0.04, richMoney: 50000 },
   refundShare: 0.75, // beim Rückbau einer Ausbaustufe gibt es so viel der Investition zurück
   unclog: { hits: 2, zone: 0.24, speed: 1.1, speedUp: 1.4, missPenalty: 1.0 },
   // Automatik: Stufe 0 = Handbetrieb, 1 = experimentell, 2 = zuverlässig, 3 = voll

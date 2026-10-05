@@ -103,3 +103,7 @@ Das Spiel heisst jetzt "Seesanierung" und hat mehrere Seen (`LEVELS` in `src/con
 - Schrift im Bild (`px()` in `src/ui/render.js`) und im Seitenrand ist grösser; im Bild wird sie nach dem Verkleinerungsmassstab angepasst, damit sie auch auf dem Handy mindestens 12 Pixel hoch ist.
 - Meldungen erscheinen unten im Bild (nicht unter der Statuszeile).
 - Die Automatik arbeitet ab dem Ort, wo sie eingeschaltet wird (`auto.startX`): sie fährt von dort nach rechts, geht zum Startpunkt zurück und wiederholt. Links davon wird nichts bearbeitet; "fertig" gilt für den Abschnitt ab dem Startpunkt.
+
+## Bauleiter Bruno (Tipps)
+
+Ein Kopf mit Arbeitshelm und Sprechblase gibt Tipps und pausiert das Spiel, solange er spricht (`src/sim/advisor.js`, Werte unter `CONFIG.advisor`). Er beobachtet laufend (geglättet): Puffer ständig voll (Empfehlung Entwässerungsanlage/Filterpresse), zu tief abtragen (Echolot kaufen oder Abtrag und Automatik einstellen), Umkippen (Tempo, Höhe, Ballast), Trübung (Vorhang), viele Verstopfungen, viel Geld auf dem Konto (empfiehlt ein bezahlbares Upgrade), offene Nachträge, Zertifikate, Aufträge, Funde, Zeitdruck und den Einstieg. Wo es passt, gibt es direkt einen Kaufknopf. Mindestabstand zwischen Tipps (55 s Spielzeit), derselbe Tipp frühestens nach 4 Minuten, nie im Minispiel oder Drohnenflug. Abschalten: Haken im Panel, Taste B oder "Bruno ausschalten" in der Sprechblase; einzelne Tipps lassen sich dauerhaft stummschalten ("Diesen Tipp nie mehr"). Beides merkt sich der Browser.
