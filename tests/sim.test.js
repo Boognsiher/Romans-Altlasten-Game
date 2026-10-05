@@ -1322,3 +1322,20 @@ test('Levels: Uetikon bleibt unverändert, andere Levels haben eigenen See, Farb
   const sim = r.createSession(); r.lake.setFlat(5); sim.anchor(); sim.slice._startFreeing(0);
   assert.equal(sim.slice.freeing.item, 'Bootsanker');
 });
+
+test('Automatik startet dort, wo sie eingeschaltet wird: links davon bleibt alles unberührt, rechts wird fertig bearbeitet', () => {
+  const g = new Game(95); g.lake.setFlat(1, 3); g.levels.auto = 3; g.levels.echolot = 2; g.cutDepth = 1.0;
+  const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor();
+  const sl = sim.slice, R = sl.rows.length;
+  sl.x = sl.x0 + 8; sl.h = sl.surfaceAt(sl.x) + 0.4;
+  sim.toggleAuto();
+  assert.ok(Math.abs(sl.auto.startX - (sl.x0 + 8)) < 1e-9);
+  assert.equal(sl.auto.dir, 'sweep');
+  let minX = 1e9;
+  for (let t = 0; t < 1500 && sl.auto.on; t += 0.05) { sim.update(0.05, {}); minX = Math.min(minX, sl.x); }
+  assert.equal(sl.auto.on, false, 'Automatik meldet fertig');
+  assert.ok(minX >= sl.x0 + 8 - 0.06, 'fährt nicht links vom Startpunkt');
+  const row = (r, c) => g.lake.mass[g.lake.idx(sl.x0 + c, r)];
+  for (const r of sl.rows) { for (let c = 0; c < 6; c++) assert.equal(row(r, c), 1, 'links unberührt'); for (let c = 9; c < 16; c++) assert.ok(row(r, c) < CONFIG.drone.acceptMax, `rechts fertig (Zeile ${r}, Spalte ${c})`); }
+  assert.equal(R, CONFIG.box.rows);
+});

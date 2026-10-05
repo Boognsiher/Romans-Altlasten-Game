@@ -11,7 +11,7 @@ import { Fx } from './ui/fx.js';
 import { checkPassword } from './ui/gate.js';
 import { createAudio } from './ui/audio.js';
 import { serializeGame, restoreGame, savedSummary } from './sim/save.js';
-import { CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
+import { view, CELL, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
@@ -307,9 +307,15 @@ function hideOverlay() { $('overlay').classList.remove('show'); }
 const overlayOpen = () => $('overlay').classList.contains('show');
 
 let toastTimer = 0;
+// Meldungen unten im Bild: oben liegen Statuszeile und Pumpe, dort würden sie verdeckt
+function placeToast() {
+  const t = $('toast');
+  t.style.right = '8px'; t.style.top = `${Math.max(8, canvas.offsetTop + canvas.clientHeight - t.offsetHeight - 12)}px`;
+}
 function toast(text, kind = 'info') {
   $('toast').innerHTML = `<span class="${kind}"></span>`;
   $('toast').firstChild.textContent = text;
+  placeToast();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $('toast').innerHTML = ''; }, 4500);
 }
@@ -356,6 +362,7 @@ function fitCanvas() {
   const cw = Math.round(lw * q), ch = Math.round(lh * q);
   if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
   canvas.q = cw / lw;
+  view.s = w / lw; fx.view = view.s; // Schrift im Bild folgt dem Massstab
 }
 
 function updateHints() {
@@ -523,7 +530,7 @@ $('btn-pump').onclick = togglePump;
 $('btn-sound').onclick = toggleSound;
 $('btn-sound').textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)';
 $('btn-pause').onclick = togglePause;
-addEventListener('resize', fitCanvas);
+addEventListener('resize', () => { fitCanvas(); placeToast(); });
 addEventListener('orientationchange', () => setTimeout(fitCanvas, 200));
 $('btn-pause2').onclick = togglePause;
 $('panel-handle').onclick = () => setSheet(!sheetOpen);

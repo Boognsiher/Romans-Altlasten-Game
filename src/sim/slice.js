@@ -39,7 +39,7 @@ export class SliceSim {
     this.overNote = 0; // Sperrzeit für die Übertiefungs-Meldung
     this.clog = 0; // Sekunden Zwangspause wegen Fremdstoff
     this.freeing = null; // Freispül-Minispiel: { pos, dir, speed, zoneC, hits, need }
-    this.auto = { on: false, dir: 'sweep', error: null, errLeft: 0 };
+    this.auto = { on: false, dir: 'sweep', error: null, errLeft: 0, startX: this.x }; // startX: dort wurde die Automatik eingeschaltet, ab hier arbeitet sie
     this.notes = []; // Meldungen für die Oberfläche: { kind, text }
   }
 
@@ -79,7 +79,7 @@ export class SliceSim {
     if (k === this.ci || this.tipped > 0) return false;
     this.ci = k; this.row = this.rows[k];
     this.auto.error = null;
-    if (this.auto.on) this.auto.dir = this.x > this.x0 + SLICE.cols / 2 ? 'return' : 'sweep';
+    if (this.auto.on) this.auto.dir = this.x >= this.auto.startX - 0.05 ? 'sweep' : 'return';
     return true;
   }
 
@@ -104,9 +104,12 @@ export class SliceSim {
   // Einsaugstelle: unten und rechts von der Pumpe (x, h = Pumpenstandort)
   mouth() { return { x: this.x + CONFIG.pump.offsetX, h: this.h - CONFIG.pump.offsetY }; }
 
+  // Erste Spalte, die die Automatik bearbeitet (dort, wo sie eingeschaltet wurde); davor ist alles Sache des Spielers
+  autoFromCol() { return clamp(Math.floor(this.auto.startX + CONFIG.pump.offsetX - this.x0), 0, SLICE.cols - 1); }
+
   windowRemaining() {
     let t = 0;
-    for (let c = 0; c < SLICE.cols; c++) t += this.lake.mass[this.lake.idx(this.x0 + c, this.row)];
+    for (let c = this.auto.on ? this.autoFromCol() : 0; c < SLICE.cols; c++) t += this.lake.mass[this.lake.idx(this.x0 + c, this.row)];
     return t;
   }
 
@@ -131,7 +134,7 @@ export class SliceSim {
   }
 
   allDone() {
-    for (let c = 0; c < SLICE.cols; c++) if (!this.colDone(c)) return false;
+    for (let c = this.auto.on ? this.autoFromCol() : 0; c < SLICE.cols; c++) if (!this.colDone(c)) return false;
     return true;
   }
 
@@ -141,7 +144,8 @@ export class SliceSim {
     if (this.stats.autoLevel <= 0) return false;
     this.auto.on = !this.auto.on;
     this.auto.error = null;
-    this.auto.dir = this.x > this.x0 + SLICE.cols / 2 ? 'return' : 'sweep';
+    this.auto.startX = this.x; // ab hier, nicht ab dem Anfang des Fensters
+    this.auto.dir = 'sweep';
     if (this.auto.on && this.stats.echolot > 0) { // vor dem Abtrag neu loten
       this.sound();
       this.say('info', `Echolot: Seegrund vermessen. Abtrag ${this.cutDepth.toFixed(2)} m wird angefahren.`);
@@ -160,7 +164,7 @@ export class SliceSim {
   // Ist Zeile k des Kastens am Sollwert (mit Echolot) bzw. sauber (ohne)?
   _rowDone(k) {
     const r = this.rows[k];
-    for (let c = 0; c < SLICE.cols; c++) {
+    for (let c = this.autoFromCol(); c < SLICE.cols; c++) {
       const i = this.lake.idx(this.x0 + c, r);
       if (!this.lake.initial[i]) continue;
       if (this.sounding ? this.lake.top[i] > this.targetAt(c, k) + CONFIG.echolot.doneEps : this.lake.mass[i] >= 0.05 / SLICE.cols) return false;
@@ -188,7 +192,7 @@ export class SliceSim {
     if (a.error === 'high') return { dx: 0, dy: -1, suction: true };
     if (lvl >= 2 && this.tilt > 0.5) return { dx: 0, dy: -1, suction: false }; // höher ziehen, bevor sie kippt
     if (a.dir === 'sweep' && this.x >= this.x0 + SLICE.cols - CONFIG.pump.offsetX - 0.05) a.dir = 'return';
-    else if (a.dir === 'return' && this.x <= this.x0 + 0.05) a.dir = 'sweep';
+    else if (a.dir === 'return' && this.x <= a.startX + 0.05) a.dir = 'sweep';
     // Mit Echolot wird nur dort gesaugt, wo die Zielhöhe noch nicht erreicht ist
     const need = !this.sounding || !this.colDone(this.mouthCol());
     return a.dir === 'sweep' ? { dx: 1, dy: 0, suction: need } : { dx: -1, dy: 0, suction: false };

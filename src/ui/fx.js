@@ -6,6 +6,7 @@ export class Fx {
   constructor(rng = Math.random) {
     this.rng = rng;
     this.colors = { ...COLORS };
+    this.view = 1; // CSS-Pixel je logischem Pixel (kleine Bildschirme: grössere Schrift)
     this.parts = []; // { x, y, vx, vy, life, max, size, color, home: {x, y} | null }
     this.floaters = []; // { x, y, text, life, color }
     this.shake = 0; // 0..1
@@ -64,7 +65,7 @@ export class Fx {
       ctx.fillStyle = p.color; ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
     ctx.globalAlpha = 1;
-    ctx.font = 'bold 18px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.font = `bold ${Math.round(Math.max(18, 14 / Math.max(0.2, this.view)))}px system-ui, sans-serif`; ctx.textAlign = 'center';
     for (const f of this.floaters) {
       ctx.globalAlpha = Math.min(1, f.life / 0.4);
       ctx.fillStyle = '#000a'; ctx.fillText(f.text, f.x + 1, f.y + 1);

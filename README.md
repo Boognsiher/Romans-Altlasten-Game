@@ -97,3 +97,9 @@ Nach jedem Drohnenflug wird der ganze Kasten (16 Spalten x 5 Zeilen) bewertet: S
 ## Levels
 
 Das Spiel heisst jetzt "Seesanierung" und hat mehrere Seen (`LEVELS` in `src/config.js`): **Uetikon** (braune Altlasten, der Klassiker), **Horgen: Papierfabrik** (weisser Faserbrei, flach, grosse Fläche, viel Büro-Inventar, milchige Trübung, etwas tiefere Vergütung) und **Richterswil: Landzunge Horn** (steil, viel harte Moräne, viele Pfahlbau-Funde, bessere Vergütung). Jedes Level hat eigene Farbe, Fremdstoff- und Fundnamen, Startgeld und Tempo der Trübung. Die Auswahl erscheint beim "Neuen Spiel"; ein Level wird freigeschaltet, wenn das vorherige mit Gewinn abgeschlossen ist. Rekorde und Spielstand gelten je Level.
+
+## Lesbarkeit und Automatik
+
+- Schrift im Bild (`px()` in `src/ui/render.js`) und im Seitenrand ist grösser; im Bild wird sie nach dem Verkleinerungsmassstab angepasst, damit sie auch auf dem Handy mindestens 12 Pixel hoch ist.
+- Meldungen erscheinen unten im Bild (nicht unter der Statuszeile).
+- Die Automatik arbeitet ab dem Ort, wo sie eingeschaltet wird (`auto.startX`): sie fährt von dort nach rechts, geht zum Startpunkt zurück und wiederholt. Links davon wird nichts bearbeitet; "fertig" gilt für den Abschnitt ab dem Startpunkt.
