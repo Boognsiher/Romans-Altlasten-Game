@@ -184,3 +184,14 @@ body.touch #btn-anchor { display: none; } /* auf dem Handy wirft der grosse Knop
   #spd-box input, #cut-box input { width: 100%; min-width: 50px; flex: 1; }
   #spd-box small, #cut-box small { display: none; }
 }
+
+/* Zeilenwahl des Kastens */
+#row-box { display: flex; align-items: center; gap: 4px; background: #000a; padding: 3px 8px; border-radius: 6px; font-size: 12px; }
+#row-box:empty { display: none; }
+.rowchip { margin: 0; padding: 0; width: 38px; height: 34px; border-radius: 8px; font-weight: 700; color: var(--ink);
+  background: linear-gradient(to top, #3a6a4a var(--p, 0%), #24415c var(--p, 0%)); border: 2px solid transparent; }
+.rowchip.on { border-color: #7fe3ff; box-shadow: 0 0 0 2px #7fe3ff55; }
+.rowchip.done { background: #2f7a48; }
+.rowchip.deep { background: linear-gradient(to top, #8a5a2a var(--p, 0%), #24415c var(--p, 0%)); }
+@media (max-width: 860px) and (orientation: portrait) { #row-box { flex: 1 1 100%; justify-content: center; } .rowchip { flex: 1; max-width: 56px; height: 40px; } }
+@media (max-width: 860px) and (orientation: portrait) and (max-height: 720px) { .rowchip { height: 32px; } #shift-actions button { min-height: 32px; } }

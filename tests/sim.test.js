@@ -922,30 +922,36 @@ test('Angebrochene Charge: Analyse anteilig, mindestens 20 Prozent', () => {
   assert.equal(processBatch(0.3, 0, stats, false, () => 0).lab, Math.round(CONFIG.plant.labFeePerBatch * 0.2));
 });
 
-test('Pumpe räumt den ganzen Kasten (alle Zeilen), nicht darüber hinaus; die Leistung verteilt sich', () => {
+test('Pumpe räumt nur die gewählte Zeile; Umschalten wechselt die Zeile des Kastens', () => {
   const g = new Game(70); g.lake.setFlat(1, 3);
   const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor();
   const sl = sim.slice, R = CONFIG.box.rows;
   assert.equal(sl.rows.length, R);
   assert.ok(sl.rows.includes(sl.row));
+  const first = sl.row;
   sl.h = 3.4; sl.x = sl.x0 + 4;
   let removed = 0;
   for (let i = 0; i < 40; i++) removed += sim.update(0.05, { dx: 0.2, dy: 0, suction: true }).removed;
-  const col = sl.x0 + Math.floor(sl.mouth().x - sl.x0) + 0;
-  for (const r of sl.rows) assert.ok(g.lake.mass[g.lake.idx(col, r)] < 1, `Zeile ${r} wurde mitgeräumt`);
-  assert.equal(g.lake.mass[g.lake.idx(col, sl.r0 - 1)], 1); // darüber nicht
-  assert.equal(g.lake.mass[g.lake.idx(col, sl.r0 + R)], 1); // darunter nicht
-  assert.ok(removed <= g.stats.power * 2 + 1e-6); // Leistung bleibt die Pumpenleistung (2 s)
+  const col = sl.x0 + Math.floor(sl.mouth().x - sl.x0);
+  assert.ok(g.lake.mass[g.lake.idx(col, first)] < 1, 'gewählte Zeile geräumt');
+  for (const r of sl.rows.filter((r) => r !== first)) assert.equal(g.lake.mass[g.lake.idx(col, r)], 1, `Zeile ${r} unberührt`);
+  assert.ok(removed <= g.stats.power * 2 + 1e-6);
+  assert.equal(sl.selectRow(0), true); // Wechsel meldet true
+  sl.selectRow(R - 1);
+  assert.equal(sl.row, sl.rows[R - 1]);
+  assert.equal(sl.selectRow(R - 1), false);
+  assert.equal(sl.selectRow(99), false); // wird auf die letzte Zeile begrenzt, keine Änderung
+  assert.ok(sl.rowStatus(R - 1).rest > 0 && !sl.rowStatus(R - 1).done);
 });
 
-test('Nach dem Abtragen meldet die Drohne keinen Restschmutz: Kasten ganz geräumt, 10 cm Rest erlaubt', () => {
+test('Nach dem Abtragen meldet die Drohne keinen Restschmutz: Kasten ganz geräumt (Vollautomatik wechselt die Zeilen)', () => {
   const g = new Game(71); g.lake.setFlat(1, 3); g.levels.auto = 3; g.levels.echolot = 2; g.cutDepth = 1.0; // die ganze belastete Schicht
   const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor(); sim.toggleAuto();
   for (let t = 0; t < 900 && sim.slice.auto.on; t += 0.05) sim.update(0.05, {});
   assert.equal(sim.slice.auto.on, false);
   const sl = sim.slice;
   for (const r of sl.rows) for (let c = 0; c < 16; c++) assert.ok(g.lake.mass[g.lake.idx(sl.x0 + c, r)] < CONFIG.drone.acceptMax, `Zeile ${r} Spalte ${c}`);
-  const d = g.startDrone({ x0: sl.x0, row: sl.row });
+  const d = g.startDrone({ x0: sl.x0, row: sl.row, r0: sl.r0 });
   d.x = d.x0 + 0.5; d.h = 4;
   for (let t = 0; t < 120 && d.scanned.some((v) => !v); t += 0.05) {
     const target = d.surfaceAt(d.x + 1.5) + 0.7;
@@ -1252,4 +1258,16 @@ test('Fremdstoffe: jeder hat eigene Schwierigkeit im Freispülen', () => {
   assert.equal(sl.freeing.need, 1); assert.ok(sl.freeing.zone > CONFIG.unclog.zone);
   // Zone liegt immer vollständig im Balken
   for (let i = 0; i < 50; i++) { const f = sl.freeing; f.zoneC = sl._zone(f); assert.ok(f.zoneC - f.zone / 2 >= -1e-9 && f.zoneC + f.zone / 2 <= 1 + 1e-9); }
+});
+
+test('Zeilenstatus: fertig erst, wenn keine Zelle der Zeile über acceptMax liegt; andere Zeilen bleiben offen', () => {
+  const g = new Game(73); g.lake.setFlat(1, 3);
+  const sim = g.createSession(); sim.y = 10.5; sim.x = 24; sim.anchor();
+  const sl = sim.slice;
+  assert.ok(!sl.rowStatus(sl.ci).done);
+  for (let c = 0; c < 16; c++) { const i = g.lake.idx(sl.x0 + c, sl.row); g.lake.top[i] = g.lake.target[i]; g.lake.mass[i] = 0; }
+  assert.ok(sl.rowStatus(sl.ci).done);
+  const other = (sl.ci + 1) % sl.rows.length;
+  assert.ok(!sl.rowStatus(other).done);
+  assert.equal(sl.rowStatus(other).rest, 16);
 });

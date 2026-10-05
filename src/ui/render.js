@@ -237,17 +237,16 @@ export function drawSlice(ctx, lake, sim) {
   ctx.fillStyle = '#ffc98a'; ctx.fillText(`Toleranz −${Math.round(CONFIG.layer.tolerance * 100)} cm: tiefer = zu tief`, W - 8, yOf(G(SLICE.cols - 1) - CONFIG.layer.tolerance) + 14);
   ctx.fillStyle = '#a8e8b6'; ctx.fillText(`+${Math.round(CONFIG.drone.acceptMax * 100)} cm: darunter gilt als sauber`, W - 8, yOf(G(SLICE.cols - 1) + CONFIG.drone.acceptMax) - 6);
   ctx.textAlign = 'start';
-  // Markierungen je Spalte über alle Zeilen des Kastens: Restschicht (rot, ▼) und zu tief (orange, ▲). Gefüllt = in der gezeigten Zeile,
-  // hohl = in einer Nachbarzeile des Kastens (dort sieht man es im Querschnitt nicht).
+  // Markierungen je Spalte in der gewählten Zeile: Restschicht (rot, ▼) und zu tief (orange, ▲). Die anderen Zeilen zeigt die Zeilenwahl.
   ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'center';
   for (let c = 0; c < SLICE.cols; c++) {
     let rest = 0, restShown = false, deep = 0, deepShown = false;
-    sl.rows.forEach((r, k) => {
+    [sl.row].forEach((r, k) => { // nur die gewählte Zeile; die anderen zeigt die Zeilenwahl
       const i = lake.idx(sl.x0 + c, r);
       if (!lake.initial[i]) return;
       const m = lake.mass[i], dpt = lake.target[i] - lake.top[i] - CONFIG.layer.tolerance;
-      if (m >= CONFIG.drone.acceptMax && m <= 0.5 && m > rest) { rest = m; restShown = k === sl.ci; }
-      if (dpt > 1e-3 && dpt > deep) { deep = dpt; deepShown = k === sl.ci; }
+      if (m >= CONFIG.drone.acceptMax && m <= 0.5 && m > rest) { rest = m; restShown = true; }
+      if (dpt > 1e-3 && dpt > deep) { deep = dpt; deepShown = true; }
     });
     const x = xs(c);
     if (rest > 0) {
@@ -379,6 +378,7 @@ export function drawSlice(ctx, lake, sim) {
   ctx.beginPath(); ctx.moveTo(mouth.x + 20, mouth.y - 10); ctx.lineTo(mouth.x + 36, mouth.y - 3); ctx.lineTo(mouth.x + 20, mouth.y + 4); ctx.fill();
   ctx.fillStyle = '#ffffff55'; ctx.font = '14px system-ui, sans-serif';
   ctx.fillText('Rückwärts saugt nicht', 12, SLICE_TOP - 8);
+  ctx.fillStyle = '#ffffffcc'; ctx.font = 'bold 13px system-ui, sans-serif'; ctx.fillText(`Zeile ${sl.ci + 1} / ${sl.rows.length}`, 12, SLICE_TOP + 18);
   turbidityVeil(ctx, sim, W, H);
 }
 

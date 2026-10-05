@@ -20,7 +20,7 @@ export class SliceSim {
     this.stats = stats;
     this.rng = rng;
     this.row = row;
-    const R = CONFIG.box.rows; // der Kasten deckt R Karten-Zeilen ab; der Querschnitt zeigt die mittlere
+    const R = CONFIG.box.rows; // der Kasten deckt R Karten-Zeilen ab; jede wird einzeln gefahren, der Querschnitt zeigt die gewählte
     this.r0 = clamp(row - Math.floor(R / 2), 0, lake.rows - R);
     this.rows = Array.from({ length: R }, (_, k) => this.r0 + k);
     this.ci = row - this.r0; // Index der angezeigten Zeile im Kasten
@@ -71,6 +71,29 @@ export class SliceSim {
 
   say(kind, text, extra = {}) { this.notes.push({ kind, text, ...extra }); }
 
+  // Zeile des Kastens wählen (k = 0..R-1). Die Pumpe bleibt an ihrer Stelle, das Gelände der neuen Zeile kann sie anheben.
+  selectRow(k) {
+    k = clamp(Math.round(k), 0, this.rows.length - 1);
+    if (k === this.ci || this.tipped > 0) return false;
+    this.ci = k; this.row = this.rows[k];
+    this.auto.error = null;
+    if (this.auto.on) this.auto.dir = this.x > this.x0 + SLICE.cols / 2 ? 'return' : 'sweep';
+    return true;
+  }
+
+  // Stand der Zeile k des Kastens: Restschicht (Zellen über acceptMax), zu tief (unter Toleranz), Restmenge in m³
+  rowStatus(k) {
+    const r = this.rows[k]; let rest = 0, deep = 0, n = 0, vol = 0;
+    for (let c = 0; c < SLICE.cols; c++) {
+      const i = this.lake.idx(this.x0 + c, r);
+      if (!this.lake.initial[i]) continue;
+      n++; vol += this.lake.mass[i] * this.lake.area;
+      if (this.lake.mass[i] >= CONFIG.drone.acceptMax) rest++;
+      if (this.lake.target[i] - this.lake.top[i] > CONFIG.layer.tolerance) deep++;
+    }
+    return { n, rest, deep, vol, done: n > 0 && rest === 0 };
+  }
+
   surfaceAt(x, row = this.row) {
     const c = clamp(Math.floor(x), 0, this.lake.cols - 1);
     return this.lake.top[this.lake.idx(c, row)]; // Oberfläche (Höhe über Felsgrund)
@@ -81,7 +104,7 @@ export class SliceSim {
 
   windowRemaining() {
     let t = 0;
-    for (const r of this.rows) for (let c = 0; c < SLICE.cols; c++) t += this.lake.mass[this.lake.idx(this.x0 + c, r)];
+    for (let c = 0; c < SLICE.cols; c++) t += this.lake.mass[this.lake.idx(this.x0 + c, this.row)];
     return t;
   }
 
@@ -101,10 +124,8 @@ export class SliceSim {
 
   // Spalte c ist fertig, wenn alle Zeilen des Kastens auf der Zielhöhe liegen (Zellen ausserhalb der bestellten Fläche zählen nicht)
   colDone(c) {
-    return this.rows.every((r, k) => {
-      const i = this.lake.idx(this.x0 + c, r);
-      return !this.lake.initial[i] || this.lake.top[i] <= this.targetAt(c, k) + CONFIG.echolot.doneEps;
-    });
+    const i = this.lake.idx(this.x0 + c, this.row);
+    return !this.lake.initial[i] || this.lake.top[i] <= this.targetAt(c, this.ci) + CONFIG.echolot.doneEps;
   }
 
   allDone() {
@@ -132,6 +153,22 @@ export class SliceSim {
     this.auto.error = null;
     this.say('good', 'Aus- und wieder einschalten hilft auch hier.');
     return true;
+  }
+
+  // Ist Zeile k des Kastens am Sollwert (mit Echolot) bzw. sauber (ohne)?
+  _rowDone(k) {
+    const r = this.rows[k];
+    for (let c = 0; c < SLICE.cols; c++) {
+      const i = this.lake.idx(this.x0 + c, r);
+      if (!this.lake.initial[i]) continue;
+      if (this.sounding ? this.lake.top[i] > this.targetAt(c, k) + CONFIG.echolot.doneEps : this.lake.mass[i] >= 0.05 / SLICE.cols) return false;
+    }
+    return true;
+  }
+
+  _nextOpenRow() {
+    for (let d = 1; d < this.rows.length; d++) for (const k of [this.ci + d, this.ci - d]) if (k >= 0 && k < this.rows.length && !this._rowDone(k)) return k;
+    return -1;
   }
 
   _autoControl(dt) {
@@ -172,8 +209,12 @@ export class SliceSim {
       const manual = Math.abs(input.dx || 0) > 0.2 || Math.abs(input.dy || 0) > 0.2;
       if (manual) { a.on = false; a.error = null; this.say('info', 'Du übernimmst das Steuer.'); }
       else if (this.sounding ? this.allDone() : this.windowRemaining() < 0.05) {
-        a.on = false;
-        this.say('good', this.sounding ? 'Abtrag auf Sollwert erreicht. Echolot meldet: passt.' : 'Fenster sauber. Automatik meldet Feierabend.');
+        const next = lvl >= 3 ? this._nextOpenRow() : -1; // Vollautomatik macht mit der nächsten offenen Zeile weiter
+        if (next >= 0) { this.selectRow(next); this.say('info', `Zeile fertig. Automatik wechselt zu Zeile ${next + 1}.`); ctl = this._autoControl(dt); }
+        else {
+          a.on = false;
+          this.say('good', this.sounding ? 'Zeile auf Sollwert. Echolot meldet: passt.' : 'Zeile sauber. Automatik meldet Feierabend.');
+        }
       }
       else ctl = this._autoControl(dt);
     }
@@ -225,7 +266,7 @@ export class SliceSim {
     // Fremdstoff an der Einsaugstelle? Wer den Kopf anhebt, fährt drüber weg.
     const m = this.mouth();
     const mcol = clamp(Math.floor(m.x), 0, this.lake.cols - 1);
-    const di = this.rows.map((r) => this.lake.idx(mcol, r)).find((i) => this.lake.debris[i]);
+    const di = this.lake.debris[this.lake.idx(mcol, this.row)] ? this.lake.idx(mcol, this.row) : undefined;
     const d = di === undefined ? 0 : this.lake.debris[di];
     if (d && m.h <= this.surfaceAt(m.x) + 1.5) {
       this.lake.debris[di] = 0;
@@ -235,7 +276,7 @@ export class SliceSim {
       this.say('clog', `Pumpe verstopft: ${DEBRIS[d - 1]}!`, { item: DEBRIS[d - 1] });
       return ZERO;
     }
-    const res = this.lake.suckSwath(this.rows, this.row, m.x, m.h, s.radius, s.power * dt);
+    const res = this.lake.suckProfile(this.row, m.x, m.h, s.radius, s.power * dt); // nur die gewählte Zeile
 
     // Zu tief abgetragen? Pro gefahrene Zelle wird zu viel Material weggesaugt: der Boden bricht
     // vor der Pumpe weg und sie kippt nach vorne. Höher ziehen, schneller fahren oder Ballast helfen.

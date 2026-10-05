@@ -7,13 +7,13 @@ import { SLICE } from './slice.js';
 // Restschmutz, Fossilien, Befliegungsdaten) gilt für alle Karten-Zeilen des Kastens in dieser Spalte.
 // Reine Simulation ohne Rendering/DOM (deshalb testbar). Koordinaten: x = Zellenkoordinate, h = Höhe über Felsgrund.
 export class DroneSim {
-  // win: { x0: linke Zelle des Fensters, row: Zeile des Ponton-Querschnitts }
+  // win: { x0: linke Zelle des Fensters, row: gezeigte Zeile, r0: erste Zeile des Kastens (optional) }
   constructor(lake, stats, win) {
     this.lake = lake;
     this.stats = stats;
     this.x0 = win.x0;
     this.row = win.row;
-    this.r0 = clamp(win.row - Math.floor(CONFIG.box.rows / 2), 0, lake.rows - CONFIG.box.rows); // erste Zeile des Kastens (wie beim Querschnitt)
+    this.r0 = win.r0 ?? clamp(win.row - Math.floor(CONFIG.box.rows / 2), 0, lake.rows - CONFIG.box.rows); // erste Zeile des Kastens (wie beim Querschnitt)
     this.x = this.x0 + 1;
     this.h = SLICE.viewH - 1;
     this.vx = 0; this.vh = 0;

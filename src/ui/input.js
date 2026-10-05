@@ -14,7 +14,7 @@ export function createInput(canvas) {
   addEventListener('keydown', (e) => {
     if (!e.repeat) taps.add(e.code);
     keys.add(e.code);
-    if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+    if (e.code === 'Space' || e.code.startsWith('Arrow') || e.code === 'Tab') e.preventDefault();
   });
   addEventListener('keyup', (e) => keys.delete(e.code));
   const toCanvas = (e) => {

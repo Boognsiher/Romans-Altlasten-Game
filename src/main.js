@@ -290,7 +290,7 @@ function fitCanvas() {
     below += el.offsetHeight + (el.id === 'touch-ui' ? 0 : parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)); // touch-ui hat margin-top:auto (Restplatz), der zählt nicht
   }
   const docTop = canvas.getBoundingClientRect().top + scrollY;
-  const availH = Math.max(narrow() ? 90 : 220, innerHeight - docTop - below - (narrow() ? 64 : 16));
+  const availH = Math.max(narrow() ? 60 : 220, innerHeight - docTop - below - (narrow() ? 64 : 16));
   let { w, h } = fitSize(stage.clientWidth, availH, lw, lh);
   // Handy hochkant, Querschnitt: der freie Platz geht in einen Zoom; das Bild folgt der Pumpe seitlich (panCanvas)
   zoom = 1;
@@ -335,6 +335,31 @@ function anchor() { if (!drone && sim.anchor()) syncMode(); }
 function leave() { if (!drone && sim.leave()) syncMode(); }
 function toggleAuto() { if (!drone) sim.toggleAuto(); }
 function toggleSound() { audio.setMuted(!audio.muted); $('btn-sound').textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
+// Zeilenwahl: der Kasten hat mehrere Zeilen, jede wird einzeln gefahren
+const rowChips = [];
+function buildRows() {
+  const box = $('row-box');
+  const lab = document.createElement('span'); lab.textContent = 'Zeile'; box.append(lab);
+  for (let k = 0; k < CONFIG.box.rows; k++) {
+    const b = document.createElement('button'); b.className = 'rowchip'; b.textContent = String(k + 1);
+    b.onclick = () => selectRow(k);
+    rowChips.push(b); box.append(b);
+  }
+}
+function selectRow(k) {
+  if (drone || sim.mode !== 'slice' || !sim.slice.selectRow(k)) return;
+  fx.clear(); toast(`Zeile ${sim.slice.ci + 1} von ${CONFIG.box.rows}`, 'info');
+}
+function updateRows() {
+  if (sim.mode !== 'slice') return;
+  const sl = sim.slice;
+  rowChips.forEach((b, k) => {
+    const st = sl.rowStatus(k), full = st.n * CONFIG.layer.thickness * game.lake.area, prog = full > 0 ? Math.max(0, Math.min(1, 1 - st.vol / full)) : 1;
+    b.className = `rowchip${k === sl.ci ? ' on' : ''}${st.done ? ' done' : st.deep ? ' deep' : ''}`;
+    b.style.setProperty('--p', `${Math.round(prog * 100)}%`);
+    b.title = st.done ? 'sauber' : `${Math.round(prog * 100)}% abgetragen${st.deep ? `, ${st.deep} Zellen zu tief` : ''}`;
+  });
+}
 function togglePump() {
   if (drone) return;
   if (sim.mode === 'slice' && sim.slice.freeing) { // verstopft: der Knopf löst das Freispül-Minispiel aus
@@ -372,7 +397,7 @@ function setSheet(open) {
 // Drohne ausbringen: taucht nur im Kasten unter dem verankerten Ponton
 function startDrone() {
   if (sim.mode !== 'slice' || drone) return;
-  drone = game.startDrone({ x0: sim.slice.x0, row: sim.slice.row });
+  drone = game.startDrone({ x0: sim.slice.x0, row: sim.slice.row, r0: sim.slice.r0 });
   syncMode();
 }
 function recall() { if (drone) { drone.timeLeft = 0; drone.over = true; } }
@@ -479,6 +504,8 @@ function frame(now) {
         if (readInput.tap('KeyT')) toggleAuto();
         if (readInput.tap('KeyR')) fixAuto();
         if (readInput.tap('KeyV')) startDrone();
+        for (let k = 0; k < CONFIG.box.rows; k++) if (readInput.tap(`Digit${k + 1}`, `Numpad${k + 1}`)) selectRow(k);
+        if (readInput.tap('Tab')) selectRow((sim.slice.ci + 1) % CONFIG.box.rows);
         if (readInput.tap('Space')) togglePump(); // Pumpe ein/aus
         inp.suction = sim.pumpOn; // gesaugt wird nur bei eingeschalteter Pumpe (Halten von Leertaste oder Maus zählt nicht)
         if (readInput.tap('KeyZ')) setSpeed(sim.pumpSpeed - 0.1);
@@ -507,6 +534,7 @@ function frame(now) {
       }
       if (sim.mode === 'slice') {
         const sl = sim.slice;
+        updateRows();
         $('btn-auto').hidden = sim.stats.autoLevel <= 0;
         $('btn-auto').textContent = sl.auto.on ? '🤖 Automatik aus (T)' : '🤖 Automatik an (T)';
         $('btn-fix').hidden = !sl.auto.error;
@@ -555,6 +583,7 @@ function frame(now) {
 
 const saved = (() => { const t = readSave(); const m = t && savedSummary(t); return m && m.status === 'playing' ? m : null; })();
 buildUpgrades();
+buildRows();
 syncMode();
 updatePanel();
 function showIntro() {
