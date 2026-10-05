@@ -61,6 +61,8 @@ export const CONFIG = {
   advisor: { firstAfter: 20, gap: 55, tipCooldown: 240, tau: 30, eventWindow: 120, bufferFull: 0.45, turbidity: 0.55, overRate: 0.04, richMoney: 50000 },
   // Kran-Minispiel (Seewasserleitung ausbauen): Aufträge tauchen ab 'firstOfferDay' alle 'everyDays' Tage auf und verfallen nach 'expireDays'
   crane: { segments: 4, seconds: 80, payPer: 2200, damagedShare: 0.5, brokenFine: 800, allBonus: 2500, fee: 400, firstOfferDay: 6, everyDays: [14, 22], expireDays: 9 },
+  // Schlauch entwirren nach dem Ankerwerfen: Knotenzahl, Obergrenze in Sekunden (danach entwirrt er sich von selbst, keine Strafe)
+  hose: { twists: 3, maxSeconds: 20 },
   refundShare: 0.75, // beim Rückbau einer Ausbaustufe gibt es so viel der Investition zurück
   unclog: { hits: 2, zone: 0.24, speed: 1.1, speedUp: 1.4, missPenalty: 1.0 },
   // Automatik: Stufe 0 = Handbetrieb, 1 = experimentell, 2 = zuverlässig, 3 = voll

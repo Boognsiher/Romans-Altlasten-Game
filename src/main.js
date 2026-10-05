@@ -9,10 +9,11 @@ import { fitSize, renderQuality } from './ui/layout.js';
 import { hintsFor } from './ui/hints.js';
 import { Fx } from './ui/fx.js';
 import { Advisor } from './sim/advisor.js';
+import { HoseSim, HOSE } from './sim/hose.js';
 import { checkPassword } from './ui/gate.js';
 import { createAudio } from './ui/audio.js';
 import { serializeGame, restoreGame, savedSummary } from './sim/save.js';
-import { view, CELL, drawCraneView, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
+import { view, CELL, drawCraneView, drawHoseView, drawDroneView, drawMap, drawSlice, sizeMap, sizeSlice, sliceHeadScreen, sliceMouthScreen, sliceY } from './ui/render.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
@@ -56,7 +57,8 @@ let game = new Game();
 let sim = game.createSession(); // Ponton (Karte/Querschnitt), läuft immer
 let drone = null; // aktiver Drohnenflug, sonst null
 let crane = null; // aktives Kran-Minispiel, sonst null
-const busy = () => !!(drone || crane); // Minispiel läuft: der Ponton ruht
+let hose = null; // Schlauch-Minispiel nach dem Ankerwerfen, sonst null
+const busy = () => !!(drone || crane || hose); // Minispiel läuft: der Ponton ruht
 let paused = false;
 let endShown = false;
 const readInput = createInput(canvas);
@@ -379,6 +381,7 @@ function fitCanvas() {
   if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
   canvas.q = cw / lw;
   view.s = w / lw; fx.view = view.s; // Schrift im Bild folgt dem Massstab
+  placeToast();
 }
 
 function updateHints() {
@@ -391,24 +394,30 @@ function updateHints() {
 }
 
 // ---------- Modus: Karte / Querschnitt / Drohne ----------
-const currentMode = () => (drone ? 'drone' : crane ? 'crane' : sim.mode);
+const currentMode = () => (drone ? 'drone' : crane ? 'crane' : hose ? 'hose' : sim.mode);
 function syncMode() {
   const mode = currentMode();
   fx.clear(); audio.hum(false, 0);
-  const size = mode === 'slice' || mode === 'drone' || mode === 'crane' ? 'slice' : 'map';
+  const size = mode === 'slice' || mode === 'drone' || mode === 'crane' || mode === 'hose' ? 'slice' : 'map';
   if (size !== shownSize) { size === 'slice' ? sizeSlice(canvas) : sizeMap(canvas, game.lake); shownSize = size; }
   $('shift-hud').hidden = false;
   $('shift-actions').hidden = false;
   $('row-box').hidden = mode !== 'slice';
   $('btn-anchor').hidden = mode !== 'map'; $('btn-leave').hidden = mode !== 'slice';
-  $('btn-drone2').hidden = mode !== 'slice'; $('btn-pump').hidden = mode !== 'slice'; $('btn-recall').hidden = mode !== 'drone' && mode !== 'crane';
+  $('btn-drone2').hidden = mode !== 'slice'; $('btn-pump').hidden = mode !== 'slice'; $('btn-recall').hidden = (mode !== 'drone' && mode !== 'crane') || false;
   $('btn-recall').textContent = mode === 'crane' ? '↩ Kran abbrechen (Q)' : '↩ Drohne einholen (Q)';
-  $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne', crane: 'Kran' }[mode];
+  $('s-mode').textContent = { map: 'Karte', slice: 'Querschnitt', drone: 'Drohne', crane: 'Kran', hose: 'Schlauch' }[mode];
   if (mode !== 'slice') { $('btn-auto').hidden = true; $('btn-fix').hidden = true; $('cut-box').hidden = true; $('spd-box').hidden = true; }
   $('btn-drone').disabled = mode !== 'slice';
   updateHints(); fitCanvas();
 }
-function anchor() { if (!busy() && sim.anchor()) syncMode(); }
+function anchor() {
+  if (busy() || !sim.anchor()) return;
+  hose = new HoseSim(game.rng); // erst den Schlauch entwirren, dann darf abgesaugt werden
+  syncMode();
+  toast('Schlauch prüfen: tippe auf die Knoten, um sie aufzudrehen', 'info');
+}
+function hoseAction() { if (hose) hose.next(); }
 function leave() { if (!busy() && sim.leave()) syncMode(); }
 function toggleAuto() { if (!busy()) sim.toggleAuto(); }
 function toggleSound() { audio.setMuted(!audio.muted); for (const id of ['btn-sound', 'btn-sound2']) $(id).textContent = audio.muted ? '🔇 Ton aus (M)' : '🔊 Ton an (M)'; }
@@ -600,7 +609,7 @@ function showLevels(note = '') {
 }
 
 function restart(loaded = null) {
-  game = loaded instanceof Game ? loaded : new Game(undefined, typeof loaded === 'string' ? loaded : game.levelId); sim = game.createSession(); drone = null; crane = null; paused = false; endShown = false;
+  game = loaded instanceof Game ? loaded : new Game(undefined, typeof loaded === 'string' ? loaded : game.levelId); sim = game.createSession(); drone = null; crane = null; hose = null; paused = false; endShown = false;
   $('btn-pause').textContent = '⏸ Pause (P)';
   sizeMap(canvas, game.lake); shownSize = 'map';
   setSheet(false); mapTarget = null; claimSig = null; findSig = null; jobSig = null; certSig = null;
@@ -610,6 +619,11 @@ function restart(loaded = null) {
   if (!(loaded instanceof Game)) { clearSave(); toast(game.level.blurb, 'info'); } else saveGame();
 }
 
+canvas.addEventListener('pointerdown', (e) => { // Maus: Klick auf den Knoten (Touch läuft über onTap)
+  if (!hose || e.pointerType === 'touch') return;
+  const r = canvas.getBoundingClientRect();
+  hose.tap(((e.clientX - r.left) / r.width) * canvas.logicalW, ((e.clientY - r.top) / r.height) * canvas.logicalH, Math.max(HOSE.hitR, 40 / view.s));
+});
 $('btn-drone').onclick = startDrone;
 $('btn-drone2').onclick = startDrone;
 $('btn-recall').onclick = recall;
@@ -626,8 +640,9 @@ $('panel-handle').onclick = () => setSheet(!sheetOpen);
 addEventListener('resize', () => { if (sheetOpen && !narrow()) setSheet(false); });
 
 // Touch: Stick, Aktionsknopf, Tippen auf die Karte
-const touch = isTouch ? setupTouch(readInput, { anchor, recall, togglePump, craneAction }) : null;
+const touch = isTouch ? setupTouch(readInput, { anchor, recall, togglePump, craneAction, hoseAction }) : null;
 readInput.onTap((px, py) => {
+  if (hose) { hose.tap(px, py, Math.max(HOSE.hitR, 40 / view.s)); return; }
   if (busy() || sim.mode !== 'map' || paused || sheetOpen || overlayOpen()) return;
   mapTarget = { x: Math.min(sim.lake.cols, Math.max(0, px / CELL)), y: Math.min(sim.lake.rows, Math.max(0, py / CELL)) };
 });
@@ -661,6 +676,12 @@ function frame(now) {
       $('s-removed').textContent = `Akku ${Math.ceil(drone.timeLeft)}s · ${done}/16 Spalten gescannt · ${drone.newlyAccepted} abgenommen · ${drone.newlyFlagged} Restschmutz`;
       $('s-turb').value = 0; $('s-tilt').value = 0;
       if (drone.over) endDrone();
+    } else if (hose) {
+      if (readInput.tap('Space', 'Enter')) hose.next();
+      hose.update(dt);
+      $('s-removed').textContent = `Schlauch: ${hose.free}/${hose.twists.length} Knoten gelöst`;
+      $('s-turb').value = 0; $('s-tilt').value = 0;
+      if (hose.over) { const auto = hose.auto; hose = null; syncMode(); toast(auto ? 'Der Schlauch hat sich von selbst entwirrt. Du darfst saugen.' : 'Schlauch frei: Pumpe frei!', 'good'); }
     } else if (crane) {
       if (readInput.tap('Escape', 'KeyQ')) recall();
       if (readInput.tap('Space', 'Enter')) craneAction();
@@ -765,6 +786,7 @@ function frame(now) {
   if (sim.mode !== 'map' || busy()) mapTarget = null;
   ctx.setTransform(canvas.q || 1, 0, 0, canvas.q || 1, 0, 0); // logische Koordinaten, Auflösung passend zur Anzeige
   if (drone) drawDroneView(ctx, game.lake, drone);
+  else if (hose) drawHoseView(ctx, hose);
   else if (crane) drawCraneView(ctx, crane);
   else if (sim.mode === 'slice') {
     const o = fx.offset();
@@ -838,4 +860,4 @@ addEventListener('pagehide', saveGame);
 addEventListener('beforeunload', saveGame);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
 requestAnimationFrame(frame);
-globalThis.__dbg = () => ({ game, sim, drone, crane, mapTarget }); // nur für Browser-Tests
+globalThis.__dbg = () => ({ game, sim, drone, crane, hose, mapTarget }); // nur für Browser-Tests

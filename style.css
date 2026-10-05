@@ -264,3 +264,5 @@ button#btn-sound2 { width: 100%; margin-top: 6px; }
 @keyframes brunoIn { from { transform: translateY(20px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes brunoBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-4px) rotate(2deg); } }
 @media (max-width: 860px) { .bruno-bubble p { font-size: 15px; } }
+
+#touch-ui #act { margin-left: auto; }

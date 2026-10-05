@@ -2,6 +2,7 @@
 import { SLICE } from '../sim/slice.js';
 import { CONFIG } from '../config.js';
 import { CRANE } from '../sim/crane.js';
+import { HoseSim, HOSE } from '../sim/hose.js';
 import { Chain, drawChain } from './chain.js';
 
 const CONFIG_FOSSIL_DEPTH = CONFIG.fossils.depthBelowTarget; // Fossilien liegen so tief unter der Sollsohle
@@ -242,9 +243,10 @@ export function drawSlice(ctx, lake, sim) {
   };
   edge((c) => G(c) - CONFIG.layer.tolerance, '#ffae4d');
   edge((c) => G(c) + CONFIG.drone.acceptMax, '#7bd88f');
-  ctx.font = `${fs(11)}px system-ui, sans-serif`; ctx.textAlign = 'right';
-  ctx.fillStyle = '#ffc98a'; ctx.fillText(`Toleranz −${Math.round(CONFIG.layer.tolerance * 100)} cm: tiefer = zu tief`, W - 8, yOf(G(SLICE.cols - 1) - CONFIG.layer.tolerance) + fs(14));
-  ctx.fillStyle = '#a8e8b6'; ctx.fillText(`+${Math.round(CONFIG.drone.acceptMax * 100)} cm: darunter gilt als sauber`, W - 8, yOf(G(SLICE.cols - 1) + CONFIG.drone.acceptMax) - fs(6, 4));
+  // Legende der Toleranzlinien im Felsband unten (dort stört sie nichts)
+  { const f = fs(11, 10), y0 = yOf(0) + f * 1.4; ctx.font = `${f}px system-ui, sans-serif`; ctx.textAlign = 'left';
+    ctx.fillStyle = '#7bd88f'; ctx.fillRect(10, y0 - f * 0.55, f * 1.6, 3); ctx.fillStyle = '#a8e8b6'; ctx.fillText(`bis +${Math.round(CONFIG.drone.acceptMax * 100)} cm: sauber`, 14 + f * 1.6, y0);
+    ctx.fillStyle = '#ffae4d'; ctx.fillRect(10, y0 + f * 1.3 - f * 0.55, f * 1.6, 3); ctx.fillStyle = '#ffc98a'; ctx.fillText(`ab −${Math.round(CONFIG.layer.tolerance * 100)} cm: zu tief`, 14 + f * 1.6, y0 + f * 1.3); }
   ctx.textAlign = 'start';
   // Markierungen je Spalte in der gewählten Zeile: Restschicht (rot, ▼) und zu tief (orange, ▲). Die anderen Zeilen zeigt die Zeilenwahl.
   const MK = fs(11, 10) / 11; // Grösse der Markierungen
@@ -286,8 +288,8 @@ export function drawSlice(ctx, lake, sim) {
     ctx.beginPath();
     for (let c = 0; c < SLICE.cols; c++) (c ? ctx.lineTo : ctx.moveTo).call(ctx, xs(c), yOf(sl.targetAt(c)));
     ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 2; ctx.setLineDash([10, 5]); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#7fe3ff'; ctx.font = `${fs(13)}px system-ui, sans-serif`;
-    ctx.fillText(`Echolot: Ziel −${sl.cutDepth.toFixed(2)} m (punktiert = Messung)`, 12, SLICE_TOP + 18);
+    ctx.fillStyle = "#7fe3ff"; ctx.font = `${fs(11, 10)}px system-ui, sans-serif`;
+    ctx.textAlign = 'right'; ctx.fillText(`Echolot: Ziel −${sl.cutDepth.toFixed(2)} m`, W - 10, yOf(0) + fs(11, 10) * 1.4); ctx.textAlign = 'start';
   }
   // Entdeckte Fossilien im Untergrund (Ammonit-Spirale)
   for (let c = 0; c < SLICE.cols; c++) {
@@ -436,4 +438,40 @@ export function drawCraneView(ctx, c) {
   }
   // Haken
   ctx.strokeStyle = '#eee'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(hx, hy + 8, 9, Math.PI * 0.1, Math.PI * 1.1, false); ctx.stroke();
+}
+
+// ---------- Minispiel Schlauch entwirren ----------
+export function drawHoseView(ctx, h) {
+  const W = SLICE.cols * U, H = SLICE_TOP + SLICE.viewH * U + BEDROCK, STEPS = 360;
+  ctx.fillStyle = '#0b1620'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#2f7396'); g.addColorStop(1, '#0f2f46');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // Ufer links, Ponton rechts
+  ctx.fillStyle = '#6a5a45'; ctx.fillRect(0, 0, HOSE.shoreX - 4, H); ctx.fillStyle = '#4a5560'; ctx.fillRect(HOSE.pontonX + 6, HOSE.pontonY - 60, W - HOSE.pontonX - 6, 120);
+  ctx.fillStyle = '#d9dee3'; ctx.fillRect(HOSE.pontonX + 6, HOSE.pontonY - 66, W - HOSE.pontonX - 6, 8);
+  // Schlauch: ein Knoten ist eine Schlinge, die beim Aufdrehen kleiner wird und verschwindet
+  const K = fs(13) / 13; // Grösse folgt der Schrift, damit Knoten auch auf kleinen Bildschirmen gross genug sind
+  const loopR = (k) => (k.state === 'free' ? 0 : 30 * K * (1 - k.open));
+  const pts = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS; let p = HoseSim.point(t);
+    for (const k of h.twists) { // Schlinge: Kreisbahn um den Knotenpunkt
+      const r = loopR(k); if (r <= 0.5) continue;
+      const d = (t - k.t) / (0.07 * Math.min(K, 1.8)); if (Math.abs(d) < 1) { const a = d * Math.PI * 2 * k.dir; p = { x: p.x + Math.sin(a) * r * (1 - Math.abs(d) * 0.3), y: p.y - (1 - Math.cos(a)) * r * 0.9 }; }
+    }
+    pts.push(p);
+  }
+  const trace = () => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); };
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  trace(); ctx.strokeStyle = '#000'; ctx.lineWidth = 17; ctx.stroke();
+  trace(); ctx.strokeStyle = h.left ? '#e0a020' : '#7bd88f'; ctx.lineWidth = 11; ctx.stroke();
+  trace(); ctx.strokeStyle = '#ffffff55'; ctx.lineWidth = 2; ctx.stroke();
+  // Hinweise auf die Knoten
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
+  for (const k of h.twists) {
+    if (k.state !== 'twisted') continue;
+    const p = HoseSim.point(k.t);
+    ctx.strokeStyle = `rgba(255,122,107,${0.5 + 0.5 * pulse})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 20 * K, (40 + pulse * 6) * K, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${fs(13)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('tippen', p.x, p.y - (74 + pulse * 6) * K); ctx.textAlign = 'start';
+  }
 }

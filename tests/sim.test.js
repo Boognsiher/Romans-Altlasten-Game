@@ -1340,8 +1340,9 @@ test('Automatik startet dort, wo sie eingeschaltet wird: links davon bleibt alle
   assert.equal(R, CONFIG.box.rows);
 });
 
+import { HoseSim, HOSE } from '../src/sim/hose.js';
 import { CraneSim, CRANE } from '../src/sim/crane.js';
-import { drawMap, drawSlice, drawDroneView, drawCraneView, view } from '../src/ui/render.js';
+import { drawMap, drawSlice, drawDroneView, drawCraneView, drawHoseView, view } from '../src/ui/render.js';
 
 // Zeichentest mit Attrappe: fängt Programmierfehler beim Zeichnen ab (z. B. verdeckte Namen), die sonst die ganze Spielschleife anhalten
 const mockCtx = () => new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'createLinearGradient' || k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : k === 'measureText' ? () => ({ width: 10 }) : () => {})), set: (t, k, v) => { t[k] = v; return true; } });
@@ -1360,6 +1361,7 @@ test('Zeichnen: Karte (mit Auftrag), Querschnitt (mit Verstopfung, Zertifikat-Sp
     const d = g.startDrone({ x0: sl.x0, row: sl.row, r0: sl.r0 });
     drawDroneView(mockCtx(), g.lake, d);
     const cr = new CraneSim(createRng(3)); cr.update(0.1, { dx: 1, dy: 1 }); cr.action(); drawCraneView(mockCtx(), cr);
+    const hs = new HoseSim(createRng(2)); hs.tap(HoseSim.point(hs.twists[0].t).x, HoseSim.point(hs.twists[0].t).y); hs.update(0.2); drawHoseView(mockCtx(), hs);
   }
   view.s = 1;
 });
@@ -1484,4 +1486,30 @@ test('Automatik schaltet sich nicht sofort ab, wenn es ab dem Startpunkt nichts 
   for (let t = 0; t < 2500 && sl.auto.on; t += 0.05) sim.update(0.05, {});
   assert.equal(sl.auto.on, false);
   for (const r of sl.rows) for (let c = 0; c < 16; c++) assert.ok(g.lake.mass[g.lake.idx(sl.x0 + c, r)] < CONFIG.drone.acceptMax, `Zeile ${r} Spalte ${c}`);
+});
+
+
+test('Schlauch entwirren: Tipp auf Knoten dreht ihn auf, daneben passiert nichts, Taste nimmt den nächsten, nach spätestens 20 s entwirrt er sich selbst', () => {
+  const h = new HoseSim(createRng(5));
+  assert.equal(h.twists.length, CONFIG.hose.twists); assert.equal(h.left, 3);
+  assert.equal(h.tap(5, 5), false, 'daneben getippt');
+  const k = h.twists[1], p = HoseSim.point(k.t);
+  assert.equal(h.tap(p.x + 10, p.y - 10), true);
+  assert.equal(k.state, 'opening');
+  assert.equal(h.tap(p.x, p.y), false, 'derselbe Knoten nicht doppelt');
+  for (let i = 0; i < 20; i++) h.update(0.05);
+  assert.equal(k.state, 'free'); assert.equal(h.free, 1);
+  assert.equal(h.next(), true); assert.equal(h.twists[0].state, 'opening'); // vom Ufer her
+  assert.equal(h.over, false);
+  // nichts mehr tun: spätestens nach maxSeconds ist alles frei
+  for (let t = 0; t < CONFIG.hose.maxSeconds + 3 && !h.over; t += 0.1) h.update(0.1);
+  assert.ok(h.over && h.auto); assert.equal(h.left, 0);
+  assert.ok(h.time <= CONFIG.hose.maxSeconds + 2, 'Obergrenze gilt');
+});
+
+test('Schlauch entwirren: sehr schnelles Spielen endet schnell, ohne Strafe', () => {
+  const h = new HoseSim(createRng(6));
+  for (const k of h.twists) { const p = HoseSim.point(k.t); h.tap(p.x, p.y); }
+  for (let i = 0; i < 100 && !h.over; i++) h.update(0.05);
+  assert.ok(h.over && !h.auto && h.time < 4);
 });

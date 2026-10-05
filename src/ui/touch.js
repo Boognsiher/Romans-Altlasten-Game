@@ -60,6 +60,7 @@ export function setupTouch(input, hooks) {
     else if (mode === 'slice') hooks.togglePump(); // Pumpe ein/aus (ein Tipp)
     else if (mode === 'drone') hooks.recall();
     else if (mode === 'crane') hooks.craneAction();
+    else if (mode === 'hose') hooks.hoseAction();
   });
   for (const el of [stick, act]) el.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -76,9 +77,9 @@ export function setupTouch(input, hooks) {
       act.classList.remove('held');
       analog = m === 'drone';
       pressed.clear(); for (const b of dpad.querySelectorAll('.dp')) b.classList.remove('held');
-      stick.hidden = m === 'slice' || m === 'crane'; dpad.hidden = m !== 'slice' && m !== 'crane'; // Pumpe: nur Pfeil-Knöpfe, sonst Stick
+      stick.hidden = m === 'slice' || m === 'crane' || m === 'hose'; dpad.hidden = m !== 'slice' && m !== 'crane'; // Pumpe: nur Pfeil-Knöpfe, sonst Stick
       input.virtual.dx = 0; input.virtual.dy = 0; knob.style.transform = '';
-      act.textContent = { map: '⚓ Anker', slice: '🌀 Pumpe AUS', drone: '↩ Einholen', crane: '🪝 Greifen' }[m];
+      act.textContent = { map: '⚓ Anker', slice: '🌀 Pumpe AUS', drone: '↩ Einholen', crane: '🪝 Greifen', hose: '🪢 Aufdrehen' }[m];
     },
   };
 }

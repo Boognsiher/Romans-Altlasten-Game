@@ -117,3 +117,7 @@ Ab Tag 6 und dann alle 14 bis 22 Tage fragt ein Wasserwerk, ob man seine alte Se
 Hat die Automatik ab ihrem Startpunkt von Anfang an nichts zu tun (Stück ist schon sauber oder ausserhalb der Fläche), links davon ist in der Zeile aber noch etwas offen, schaltet sie sich nicht sofort ab, sondern fährt zur ersten offenen Stelle. Hat sie schon gearbeitet und ist ab dem Startpunkt fertig, hört sie wie bisher auf.
 
 Speichern bei Änderungen: Kauf, Rückbau, Nachträge, Zertifikate, Funde, Aufträge und Reglerwerte lösen innerhalb einer halben Sekunde einen Speicherstand aus (auch bei geöffnetem Panel und in der Pause). Dazu kommen Tageswechsel, alle 10 Sekunden, Pause, Verlassen oder Verstecken der Seite.
+
+## Minispiel: Schlauch entwirren
+
+Nach dem Ankerwerfen ist der Pumpenschlauch verdreht: 3 Knoten (`CONFIG.hose`). Ein Tipp oder Klick auf einen Knoten (oder Leertaste / grosser Knopf für den nächsten) dreht ihn auf; sind alle frei, darf abgesaugt werden. Es gibt keine Strafe und kein Scheitern; spätestens nach 20 Sekunden entwirrt sich der Rest von selbst, das Minispiel dauert also nie länger (`src/sim/hose.js`). Die Toleranzlinien im Querschnitt haben jetzt eine kleine Legende im Felsband (statt grosser Beschriftung im Bild).
